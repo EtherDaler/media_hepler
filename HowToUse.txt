@@ -1,0 +1,6 @@
+1. Install Python version 3.6+ to your device.
+2. Open terminal and write this command Windows: "python -m pip install --user virtualenv" Linux\Mac: "python3 -m pip install --user virtualenv"
+3. Than write this command Windows: "python -m venv myvenv", Linux\Mac: "python3 -m venv myvenv"
+4. Write command Windows: "myvenv\Scripts\activate", Linux\Mac: "source myvenv/bin/activate"
+5. Than write this command "pip install -r requirements.txt"
+6. Finally to start work write command Windows: "python main.py", Linux\Mac: "python3 main.py"
