@@ -5,3 +5,4 @@
 5. Write command `Windows`: `myvenv\Scripts\activate`, `Linux\Mac`: `source myvenv/bin/activate`
 6. Than write this command "pip install -r requirements.txt"
 7. Finally to start work write command `Windows`: `python main.py`, `Linux\Mac`: `python3 main.py`
+8. Results will be in the folders `videos` or `audio` (depends on what you want) in working directory
