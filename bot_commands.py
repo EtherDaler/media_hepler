@@ -20,7 +20,7 @@ class VideoState(StatesGroup):
 
 @router.message(CommandStart())
 async def command_start_handler(message: Message) -> None:
-    file = "texts/command_start.txt"
+    file = "./texts/start_text.txt"
     with open(file, "r", encoding="utf-8") as f:
         command_start_text = f.read()
         await message.answer(command_start_text.format(message.from_user.full_name))
