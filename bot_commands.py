@@ -64,18 +64,21 @@ async def get_link(message: Message, state: FSMContext) -> None:
                 os.remove(f"./audio/youtube/{filename}")
     await state.finish()
 
-@router.message(VideoState.video, content_types=ContentType.VIDEO)
+@router.message(VideoState.video)
 async def process_video(message: Message, state: FSMContext) -> None:
-    video_file = await message.video.download()  # Загружаем видео
-    video_path = video_file.name  # Путь к загруженному видео
-    await message.answer("Видео получено. Извлекаем аудио...")
+    if message.content_type == ContentType.VIDEO:
+        video_file = await message.video.download()  # Загружаем видео
+        video_path = video_file.name  # Путь к загруженному видео
+        await message.answer("Видео получено. Извлекаем аудио...")
 
-    filename = await worker.convert_to_audio(video_path)
-    # Отправляем извлечённое аудио обратно пользователю
-    doc = await message.answer_audio(audio=open(f"./audio/converted/{filename}", 'rb'), caption="Вот ваше аудио!")
-    if doc:
-        if os.path.isfile(f"./audio/converted/{filename}"):
-            os.remove(f"./audio/converted/{filename}")
-        if os.path.isfile(f"{video_path}"):
-            os.remove(f"{video_path}")
-    await state.finish()
+        filename = await worker.convert_to_audio(video_path)
+        # Отправляем извлечённое аудио обратно пользователю
+        doc = await message.answer_audio(audio=open(f"./audio/converted/{filename}", 'rb'), caption="Вот ваше аудио!")
+        if doc:
+            if os.path.isfile(f"./audio/converted/{filename}"):
+                os.remove(f"./audio/converted/{filename}")
+            if os.path.isfile(f"{video_path}"):
+                os.remove(f"{video_path}")
+        await state.finish()
+    else:
+        await message.answer("Загрузите видео")
