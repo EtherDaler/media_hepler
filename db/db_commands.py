@@ -8,7 +8,7 @@ from sqlalchemy import select, update
 from aiogram.types import Message
 from sqlalchemy.orm import selectinload
 
-from models import User, Transaction, Mfc, Mvd, File
+from models import User
 from data.config import ADMINS
 
 
