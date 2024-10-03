@@ -102,18 +102,20 @@ async def get_link(message: Message, state: FSMContext) -> None:
     if state_info["command_type"] == 'video':
         await message.answer("Подождите загружаем видео...")
         filename = await worker.download_from_youtube(link)
-        doc = await message.answer_document(document=FSInputFile(f"./videos/youtube/{filename}"), caption="Ваше видео готово!")
-        if doc:
-            if os.path.isfile(f"./videos/youtube/{filename}"):
-                os.remove(f"./videos/youtube/{filename}")
+        if filename:
+            doc = await message.answer_document(document=FSInputFile(f"./videos/youtube/{filename}"), caption="Ваше видео готово!")
+            if doc:
+                if os.path.isfile(f"./videos/youtube/{filename}"):
+                    os.remove(f"./videos/youtube/{filename}")
 
     else:
         await message.answer("Подождите загружаем аудио...")
         filename = await worker.get_audio_from_youtube(link)
-        doc = await message.answer_document(document=FSInputFile(f"./audio/youtube/{filename}"), caption="Ваше аудио готово!")
-        if doc:
-            if os.path.isfile(f"./audio/youtube/{filename}"):
-                os.remove(f"./audio/youtube/{filename}")
+        if filename:
+            doc = await message.answer_document(document=FSInputFile(f"./audio/youtube/{filename}"), caption="Ваше аудио готово!")
+            if doc:
+                if os.path.isfile(f"./audio/youtube/{filename}"):
+                    os.remove(f"./audio/youtube/{filename}")
     await state.finish()
 
 @router.message(VideoState.video)

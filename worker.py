@@ -53,6 +53,7 @@ def _convert_audio(video, path, out_format, filename):
     return f"{filename}.{out_format}"
 
 async def get_audio_from_youtube(link, path="./audio/youtube", out_format="mp3", filename=None):
+    audio = None
     video = await download_from_youtube(link)
     video_path = "./videos/youtube"
     rev = video[::-1]
