@@ -230,7 +230,8 @@ async def process_sendall(message: Message, session: AsyncSession, state: FSMCon
     users = await db_commands.db_get_items(User, message, session)
     state_message = message.text
     for user in users:
-        await message.bot.send_message(user.tg_id, state_message)
+        if user.tg_id != message.from_user.id:
+            await message.bot.send_message(user.tg_id, state_message)
     await message.answer("Сообщение отправлено")
     await state.clear()
 
