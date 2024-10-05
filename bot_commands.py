@@ -193,8 +193,10 @@ async def process_metadata(message: Message, state: FSMContext) -> None:
                 ind += 1
             await message.bot.download_file(file_path, f"./metadata/{filename}.{format}")
             file_path = f"./metadata/{filename}.{format}"
+            print(file_path)
             meta = metadata.get_metadata(file_path)
-            if meta is not None:
+            print(meta)
+            if meta:
                 strings = list(map(lambda x: f"{x}: {meta[x]}", meta.keys()))
                 result = "\n".join(strings)
                 await message.answer("Метаданные готовы, если их нет, значит у файла изначально их небыло")

@@ -102,10 +102,13 @@ def vid_aud_matadata(path_f: str):
 def get_metadata(path: str):
     try:
         if path.endswith(".jpg") or path.endswith(".jpeg"):
+            print("jpg")
             return image_metadata_jpg(path)
-        elif path.endswith(".heic") or path.endswith(".CR2") or path.endswith(".NEF"):
+        elif path.endswith(".heic") or path.endswith(".HEIC") or path.endswith(".CR2") or path.endswith(".NEF"):
+            print("ios")
             return get_exif_data_ios(path)
         else:
+            print("video")
             return vid_aud_matadata(path)
     except:
         return None
