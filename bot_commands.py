@@ -136,7 +136,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
             if doc:
                 if os.path.isfile(f"./audio/youtube/{filename}"):
                     os.remove(f"./audio/youtube/{filename}")
-    await state.finish()
+    await state.clear()
 
 @router.message(VideoState.video)
 async def process_video(message: Message, state: FSMContext) -> None:
@@ -166,7 +166,7 @@ async def process_video(message: Message, state: FSMContext) -> None:
                 os.remove(f"./audio/converted/{filename}")
             if os.path.isfile(f"{video_path}"):
                 os.remove(f"{video_path}")
-        await state.finish()
+        await state.clear()
     else:
         await message.answer("Загрузите видео")
 
@@ -199,10 +199,10 @@ async def process_metadata(message: Message, state: FSMContext) -> None:
                 result = "\n".join(strings)
                 await message.answer("Метаданные готовы, если их нет, значит у файла изначально их небыло")
                 await message.answer(result)
-                await state.finish()
+                await state.clear()
             else:
                 await message.answer("Произошла ошибка, возможно файл пока не поддерживается.")
-                await state.finish()
+                await state.clear()
             if os.path.isfile(f"{file_path}"):
                 os.remove(f"{file_path}")
         else:
