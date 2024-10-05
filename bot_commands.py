@@ -27,6 +27,9 @@ class VideoState(StatesGroup):
 class MetaDataState(StatesGroup):
     file = State()
 
+class SendAllState(StatesGroup):
+    message = State()
+
 @router.message(CommandStart())
 async def command_start_handler(message: Message, session: AsyncSession) -> None:
     file = "./texts/start_text.txt"
@@ -109,6 +112,18 @@ async def count_users(message: Message, session: AsyncSession) -> None:
         if user.is_admin:
             users = await db_commands.db_get_items(User, message, session)
             await message.answer(f"Количесвто пользователей, использующих бот: {len(users)}")
+        else:
+            await message.answer("У вас нет прав!")
+    else:
+        await message.answer("У вас нет прав!")
+
+@router.message(Command('send_all'))
+async def send_all(message: Message, session: AsyncSession, state: FSMContext) -> None:
+    user = await db_commands.get_item(User, 'tg_id', message.from_user.id, message, session)
+    if user is not None:
+        if user.is_admin:
+            await message.answer("Напишите сообщение")
+            await state.set_state(SendAllState.message)
         else:
             await message.answer("У вас нет прав!")
     else:
@@ -209,6 +224,15 @@ async def process_metadata(message: Message, state: FSMContext) -> None:
                 os.remove(f"{file_path}")
         else:
             await message.answer("Отправьте фото, видео или аудио файлом!")
+
+@router.message(SendAllState.message)
+async def process_sendall(message: Message, session: AsyncSession, state: FSMContext) -> None:
+    users = await db_commands.db_get_items(User, message, session)
+    state_message = message.text
+    for user in users:
+        await message.bot.send_message(user.tg_id, state_message)
+    await message.answer("Сообщение отправлено")
+    await state.clear()
 
 @router.message(Command("cancel"))
 @router.message(F.text.casefold() == "cancel")

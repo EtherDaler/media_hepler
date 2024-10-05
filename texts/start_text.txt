@@ -5,3 +5,5 @@
   • /youtube_video: Скачать видео с YouTube
   • /youtube_audio: Скачать аудио с YouTube
   • /convert_to_audio: Вырезать аудиодорожку из видео
+  • /get_metadata: Получить метаинформацию из файла
+  • /cancel: Отменить какую-то команду
