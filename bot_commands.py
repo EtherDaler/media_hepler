@@ -139,7 +139,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
     await state.finish()
 
 @router.message(VideoState.video)
-async def process_video(bot: Bot, message: Message, state: FSMContext) -> None:
+async def process_video(message: Message, state: FSMContext) -> None:
     if message.content_type == ContentType.VIDEO:
         await message.answer("Видео получено. Извлекаем аудио...")
         video_id = message.document.file_id
@@ -148,7 +148,7 @@ async def process_video(bot: Bot, message: Message, state: FSMContext) -> None:
         tmp = rev.find('.')
         filename = rev[:tmp:-1]
         format = rev[tmp-1::-1]
-        video_file = await bot.get_file(video_id)
+        video_file = await message.bot.get_file(video_id)
         video_path = video_file.file_path  # Путь к загруженному видео
         os.makedirs("./video/for_convert/", exist_ok=True)
         # Генерируем уникальное имя файла
@@ -156,7 +156,7 @@ async def process_video(bot: Bot, message: Message, state: FSMContext) -> None:
         while os.path.isfile(f"./video/for_convert/{filename}.{format}"):
             filename = filename + f"({ind})"
             ind += 1
-        await bot.download_file(video_path, f"./video/for_convert/{filename}.{format}")
+        await message.bot.download_file(video_path, f"./video/for_convert/{filename}.{format}")
         video_path = f"./video/for_convert/{filename}.{format}"
         filename = await worker.convert_to_audio(video_path)
         # Отправляем извлечённое аудио обратно пользователю
@@ -171,7 +171,7 @@ async def process_video(bot: Bot, message: Message, state: FSMContext) -> None:
         await message.answer("Загрузите видео")
 
 @router.message(MetaDataState.file)
-async def process_metadata(bot: Bot, message: Message, state: FSMContext) -> None:
+async def process_metadata(message: Message, state: FSMContext) -> None:
     if message.content_type == ContentType.DOCUMENT:
         condition = message.document.mime_type.startswith('image/') \
             or message.document.mime_type.startswith('video/') \
@@ -185,13 +185,13 @@ async def process_metadata(bot: Bot, message: Message, state: FSMContext) -> Non
             tmp = rev.find('.')
             filename = rev[:tmp:-1]
             format = rev[tmp-1::-1]
-            file_tg = await bot.get_file(file_id)
+            file_tg = await message.bot.get_file(file_id)
             file_path = file_tg.file_path  # Путь к загруженному видео
             ind = 1
             while os.path.isfile(f"./metadata/{filename}.{format}"):
                 filename = filename + f"({ind})"
                 ind += 1
-            await bot.download_file(file_path, f"./metadata/{filename}.{format}")
+            await message.bot.download_file(file_path, f"./metadata/{filename}.{format}")
             file_path = f"./metadata/{filename}.{format}"
             meta = metadata.get_metadata(file_path)
             if meta is not None:
