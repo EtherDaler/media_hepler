@@ -5,10 +5,16 @@ import requests
 import os
 import base64
 import yt_dlp
+import exifread
 
 from moviepy.editor import VideoFileClip
 from pytube import YouTube
 from instascrape.scrapers import Reel
+from pprint import pprint
+
+import ffmpeg
+from PIL import Image, ExifTags
+
 
 
 def generate_session():
@@ -73,8 +79,6 @@ async def get_audio_from_youtube(link, path="./audio/youtube", out_format="mp3",
         os.remove(f"{video_path}/{video}")
     return audio
 
-
-
 def download_reel(url, path="./videos/insta"):
     sessionId = generate_session().decode('utf-8')  # Преобразуем байтовую строку в обычную строку
     headers = {
@@ -90,13 +94,11 @@ def download_reel(url, path="./videos/insta"):
 
     # Скачиваем видео
     insta_reel.download(fp=f"{path}/reel{int(time.time())}.mp4")
- 
-
 
 if __name__ == "__main__":
     print("Welcome to audio/video helper!")
-    print("To download youtube video input 1\n To extract audio from video input 2\n To download audio from youtube "
-          "input 3\n To download reels from instagram input 4\n")
+    print("To download youtube video input 1\nTo extract audio from video input 2\nTo download audio from youtube "
+          "input 3\nTo download reels from instagram input 4\nTo read image\\video\\audio metadata input 5\n")
     choise = int(input("Chose variant: "))
     if choise == 1:
         link = input("Give me the link: ")
