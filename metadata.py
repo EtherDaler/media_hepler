@@ -133,3 +133,7 @@ def get_metadata(path: str):
 print(
     get_exif_data("IMG_7549.HEIC")
 )
+
+print(
+    get_exif_data("IMG20241005053328.jpg")
+)
