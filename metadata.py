@@ -12,7 +12,6 @@ from pillow_heif import register_heif_opener
 from pprint import pprint
 from pathlib import Path  # search within directories and subdirectories
 
-logfile = open('imagelog.txt', 'a')  # all files that are not printed out below will logged here
 
 def get_exif_data(ifile):  # if the file is a standard image file
     if re.search(r'jpeg$|bmp$|png$|jpg$', str(ifile), re.IGNORECASE):
@@ -51,27 +50,15 @@ def get_exif_data(ifile):  # if the file is a standard image file
         return make, str(model).partition(' ')[2], str(orig_date)[:10], ifile  # some hoops to get the correct format
 
     else:
+        logfile = open('imagelog.txt', 'a')  # all files that are not printed out below will logged here
         logfile.write(ifile + " this file is corrupt")
+        logfile.close()
 
 
 # the routine to print out make , model etc.
 def print_results(make, model, date_gen, image_name):
     print("{:20.20} \t {:<20} \t {:10.10} \t {}".format(str(make), str(model), str(date_gen), image_name))
 
-
-for path in Path('YOUR PATH HERE').rglob('*'):  # the path will be different for a PC
-    # uncomment the below if you simply want work specifically with image files
-    # if re.search(r'\.jpg$|\.png$|\.bmp$|\.heic$|\.cr2$', str(path), re.IGNORECASE):
-    if path.is_file():  # this simply validates that it's a file
-        try:
-            make, model, orig_date, image_name = get_exif_data(path)
-            print_results(make, model, orig_date,
-                          os.path.basename(image_name))  # path.baseline strips out file from path
-
-        except:
-            logfile.write(str(path) + " may be corrupted or not an image file \n")
-
-logfile.close()  # close the log file
 
 def image_metadata(path_f: str):
     register_heif_opener()
@@ -136,4 +123,7 @@ print(
 
 print(
     get_exif_data("IMG20241005053328.jpg")
+)
+print(
+    image_metadata("IMG20241005053328.jpg")
 )
