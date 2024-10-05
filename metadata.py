@@ -13,13 +13,13 @@ from pprint import pprint
 from pathlib import Path  # search within directories and subdirectories
 
 
-def get_exif_data(ifile):  # if the file is a standard image file
+def get_exif_data_ios(ifile):  # if the file is a standard image file
     if re.search(r'jpeg$|bmp$|png$|jpg$', str(ifile), re.IGNORECASE):
         image = Image.open(ifile)
         exifdata = image.getexif()
         for k, v in exifdata.items():
             print(k, v)
-        return exifdata.get(271), exifdata.get(272), exifdata.get(36867), ifile
+        return {"make": exifdata.get(271), "model": exifdata.get(272), "gen": exifdata.get(36867), "file": ifile}
 
     elif re.search(r'heic$', str(ifile), re.IGNORECASE):  # if an Apple Heic file
 
@@ -32,10 +32,7 @@ def get_exif_data(ifile):  # if the file is a standard image file
 
         tags = exifread.process_file(fstream, details=False)
 
-        for k, v in tags.items():
-            print(k, v)
-
-        return str(tags.get("Image Make")), str(tags.get("Image Model")), str(tags.get('EXIF DateTimeOriginal')), ifile
+        return tags
 
     elif re.search(r'CR2$|NEF$', str(ifile), re.IGNORECASE):  # for raw files. Canon and NIkon is this case.
         f = open(ifile, 'rb')  # open the file in bytes / ro mode
@@ -47,7 +44,7 @@ def get_exif_data(ifile):  # if the file is a standard image file
         model = tags['Image Model']
         orig_date = tags['EXIF DateTimeOriginal']
 
-        return make, str(model).partition(' ')[2], str(orig_date)[:10], ifile  # some hoops to get the correct format
+        return tags
 
     else:
         logfile = open('imagelog.txt', 'a')  # all files that are not printed out below will logged here
@@ -60,11 +57,28 @@ def print_results(make, model, date_gen, image_name):
     print("{:20.20} \t {:<20} \t {:10.10} \t {}".format(str(make), str(model), str(date_gen), image_name))
 
 
-def image_metadata(path_f: str):
+def image_metadata_jpg(path_f: str):
     register_heif_opener()
 
     img = Image.open(path_f)
-    info_dict = {
+    try:
+        exif = {ExifTags.TAGS[k]: v for k, v in img._getexif().items() if k in ExifTags.TAGS}
+        info_dict = {}
+        print(f'\n[+] Метаданные фото: {os.path.split(path_f)[1]:27}\n')
+        for info in exif:
+            if info == 'GPSInfo':
+                info_dict[info] = f"{exif[info][2]} {exif[info][1]} - long {exif[info][4]} {exif[info][3]}"
+                #print(f'{info:27}: lat {exif[info][2]} {exif[info][1]} - long {exif[info][4]} {exif[info][3]}')
+            else:
+                if isinstance(exif[info], bytes):
+                    info_d = exif[info].decode()
+                    info_dict[info] = info_d
+                    #print(f'{info:25}: {info_d}')
+                else:
+                    info_dict[info]
+                    #print(f'{info:25}: {exif[info]}')
+    except AttributeError:
+        info_dict = {
             "Имя файла": os.path.split(path_f)[1],
             "Разрешение изображения": img.size,
             "Высота изображения": img.height,
@@ -74,20 +88,6 @@ def image_metadata(path_f: str):
             "Анимированное изображение": getattr(img, "is_animated", False),
             "Кадров в изображении": getattr(img, "n_frames", 1)
         }
-    try:
-        exif = {ExifTags.TAGS[k]: v for k, v in img._getexif().items() if k in ExifTags.TAGS}
-
-        print(f'\n[+] Метаданные фото: {os.path.split(path_f)[1]:27}\n')
-        for info in exif:
-            if info == 'GPSInfo':
-                print(f'{info:27}: lat {exif[info][2]} {exif[info][1]} - long {exif[info][4]} {exif[info][3]}')
-            else:
-                if isinstance(exif[info], bytes):
-                    info_d = exif[info].decode()
-                    print(f'{info:25}: {info_d}')
-                else:
-                    print(f'{info:25}: {exif[info]}')
-    except AttributeError:
         print(f'\n[+] Информация о фото: {os.path.split(path_f)[1]:27}\n')
         for k, v in info_dict.items():
             print(f"{k:27}: {v}")
@@ -95,35 +95,30 @@ def image_metadata(path_f: str):
 
 def vid_aud_matadata(path_f: str):
     try:
-        print(f'\n[+] Метаданные файла: {os.path.split(path_f)[-1]}\n')
-        pprint(ffmpeg.probe(path_f)["streams"])
-    except ffmpeg._run.Error:
-        print('[-] Неподдерживаемый формат')
+        return ffmpeg.probe(path_f)["streams"]
+    except:
+        return None
 
 def get_metadata(path: str):
-    if not os.path.exists(path):
-        print('[-] Файла не существует')
-    else:
-        if path.endswith(".jpg"):
-            image_metadata(path)
-        elif path.endswith(".jpeg"):
-            image_metadata(path)
-        elif path.endswith(".heic"):
-            image_metadata(path)
-        elif path.endswith(".HEIC"):
-            image_metadata(path)
+    try:
+        if path.endswith(".jpg") or path.endswith(".jpeg"):
+            return image_metadata_jpg(path)
+        elif path.endswith(".heic") or path.endswith(".CR2") or path.endswith(".NEF"):
+            return get_exif_data_ios(path)
         else:
-            vid_aud_matadata(path)
+            return vid_aud_matadata(path)
+    except:
+        return None
 
-# Пример использования
-
+"""
 print(
-    get_exif_data("IMG_7549.HEIC")
+    get_exif_data_ios("IMG_7549.HEIC")
 )
 
 print(
-    get_exif_data("IMG20241005053328.jpg")
+    get_exif_data_ios("IMG20241005053328.jpg")
 )
 print(
-    image_metadata("IMG20241005053328.jpg")
+    image_metadata_jpg("IMG20241005053328.jpg")
 )
+"""
