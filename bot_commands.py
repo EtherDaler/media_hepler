@@ -142,8 +142,8 @@ async def get_link(message: Message, state: FSMContext) -> None:
 async def process_video(message: Message, state: FSMContext) -> None:
     if message.content_type == ContentType.VIDEO:
         await message.answer("Видео получено. Извлекаем аудио...")
-        video_id = message.document.file_id
-        video_name = message.document.file_name
+        video_id = message.video.file_id
+        video_name = message.video.file_name
         rev = video_name[::-1]
         tmp = rev.find('.')
         filename = rev[:tmp:-1]
