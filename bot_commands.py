@@ -150,15 +150,15 @@ async def process_video(message: Message, state: FSMContext) -> None:
         format = rev[tmp-1::-1]
         video_file = await message.bot.get_file(video_id)
         video_path = video_file.file_path  # Путь к загруженному видео
-        os.makedirs("./video/for_convert/", exist_ok=True)
+        os.makedirs("./videos/for_convert/", exist_ok=True)
         # Генерируем уникальное имя файла
         ind = 1
         while os.path.isfile(f"./video/for_convert/{filename}.{format}"):
             filename = filename + f"({ind})"
             ind += 1
         await message.bot.download_file(video_path, f"./video/for_convert/{filename}.{format}")
-        video_path = f"./video/for_convert/{filename}.{format}"
-        filename = await worker.convert_to_audio(video_path)
+        video_path = f"./videos/for_convert/{filename}.{format}"
+        filename = await worker.convert_to_audio(video_path, filename=filename)
         # Отправляем извлечённое аудио обратно пользователю
         doc = await message.answer_document(document=FSInputFile(f"./audio/converted/{filename}"), caption="Вот ваше аудио!")
         if doc:
