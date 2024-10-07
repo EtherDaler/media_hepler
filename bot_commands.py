@@ -307,39 +307,42 @@ async def replace_audio_video(message: Message, state: FSMContext) -> None:
 
 @router.message(ReplaceAudioState.audio)
 async def replace_audio_audio(message: Message, state: FSMContext) -> None:
-    if message.content_type == ContentType.DOCUMENT:
-        if message.document.mime_type.startswith('audio/'):
-            os.makedirs("./audio/for_replace/", exist_ok=True)
-            audio_id = message.document.file_id
-            audio_name = message.document.file_name
-            rev = audio_name[::-1]
-            tmp = rev.find('.')
-            filename = rev[:tmp:-1]
-            format = rev[tmp-1::-1]
-            audio_tg = await message.bot.get_file(audio_id)
-            audio_path = audio_tg.file_path  # Путь к загруженному видео
-            ind = 1
-            while os.path.isfile(f"./audio/for_replace/{filename}.{format}"):
-                filename = filename + f"({ind})"
-                ind += 1
-            await message.bot.download_file(audio_path, f"./audio/for_replace/{filename}.{format}")
-            audio_path = f"./audio/for_replace/{filename}.{format}"
-            await state.update_data(audio=audio_path)
-            data = await state.get_data()
-            result_path = worker.replace_audio(data['video'], data['audio'])
-            if result_path:
-                await message.answer_document(document=FSInputFile(result_path), caption="Ваше видео готово!\n@django_media_helper_bot")
-                if os.path.isfile(result_path):
-                    os.remove(result_path)
-            else:
-                await message.answer("Произошла ошибка, повторите попытку позже.")
-            if os.path.isfile(data['video']):
-                os.remove(data['video'])
-            if os.path.isfile(data['audio']):
-                os.remove(data['audio'])
-            await state.clear()
+    cond1 = message.content_type == ContentType.DOCUMENT and message.document.mime_type.startswith('audio/')
+    cond2 = message.content_type == ContentType.AUDIO
+    if cond1:
+        context =  message.document
+    else:
+        context = message.audio
+    if cond1 or cond2:
+        os.makedirs("./audio/for_replace/", exist_ok=True)
+        audio_id = context.file_id
+        audio_name = context.file_name
+        rev = audio_name[::-1]
+        tmp = rev.find('.')
+        filename = rev[:tmp:-1]
+        format = rev[tmp-1::-1]
+        audio_tg = await message.bot.get_file(audio_id)
+        audio_path = audio_tg.file_path  # Путь к загруженному видео
+        ind = 1
+        while os.path.isfile(f"./audio/for_replace/{filename}.{format}"):
+            filename = filename + f"({ind})"
+            ind += 1
+        await message.bot.download_file(audio_path, f"./audio/for_replace/{filename}.{format}")
+        audio_path = f"./audio/for_replace/{filename}.{format}"
+        await state.update_data(audio=audio_path)
+        data = await state.get_data()
+        result_path = worker.replace_audio(data['video'], data['audio'])
+        if result_path:
+            await message.answer_document(document=FSInputFile(result_path), caption="Ваше видео готово!\n@django_media_helper_bot")
+            if os.path.isfile(result_path):
+                os.remove(result_path)
         else:
-            await message.answer("Отправьте аудио.")
+            await message.answer("Произошла ошибка, повторите попытку позже.")
+        if os.path.isfile(data['video']):
+            os.remove(data['video'])
+        if os.path.isfile(data['audio']):
+            os.remove(data['audio'])
+        await state.clear()
     else:
         await message.answer("Отправьте аудио.")
     
