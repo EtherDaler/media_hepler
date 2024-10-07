@@ -7,7 +7,7 @@ import base64
 import yt_dlp
 import exifread
 
-from moviepy.editor import VideoFileClip
+from moviepy.editor import VideoFileClip, AudioFileClip, concatenate_audioclips
 from pytube import YouTube
 from instascrape.scrapers import Reel
 from pprint import pprint
@@ -19,6 +19,13 @@ from PIL import Image, ExifTags
 
 def generate_session():
     return base64.b64encode(os.urandom(16))
+
+def get_name_from_path(path: str):
+    filename = path.split("/")
+    filename = filename[-1]
+    filename = filename.split(".")
+    filename = filename[0]
+    return filename
 
 
 async def download_from_youtube(link, path='./videos/youtube', out_format="mp4", res="720p", filename=None):
@@ -79,26 +86,68 @@ async def get_audio_from_youtube(link, path="./audio/youtube", out_format="mp3",
         os.remove(f"{video_path}/{video}")
     return audio
 
-def download_reel(url, path="./videos/insta"):
-    sessionId = generate_session().decode('utf-8')  # Преобразуем байтовую строку в обычную строку
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)\
-        AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.74 \
-        Safari/537.36 Edg/79.0.309.43",
-        "cookie": f'sessionid={sessionId};'
+def download_instagram_reels(reels_url):
+    path = "./video/reels"
+    os.makedirs(path, exist_ok=True)
+    i = reels_url.find("reel")
+    j = reels_url[i+5:].find('/')
+    filename = reels_url[i+5:i+5+j]
+    while os.path.isfile(f"{path}/{filename}.mp4"):
+        filename = filename + f"({ind})"
+        ind += 1
+    ydl_opts = {
+        'outtmpl': f"{path}/{filename}.mp4",  # Имя файла для сохранения
+        'cookiefile': './instagram.txt',  # Путь к файлу с cookies
     }
-    insta_reel = Reel(url)
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([reels_url])
+        return f"{path}/{filename}.mp4"
+    except:
+        return None
+    
+def replace_audio(video_path, audio_path, path="./video/for_replace/ready"):
+    os.makedirs(path, exist_ok=True)
+    # Загружаем видео
+    video_name = get_name_from_path(video_path)
+    audio_name = get_name_from_path(audio_path)
+    result_name = video_name + "_" + audio_name 
+    try:
+        video = VideoFileClip(video_path)
+        
+        # Загружаем новое аудио
+        audio = AudioFileClip(audio_path)
+        
+        # Проверяем длительности
+        video_duration = video.duration
+        audio_duration = audio.duration
+        
+        if audio_duration > video_duration:
+            # Если аудио длиннее видео, обрезаем аудио
+            audio = audio.subclip(0, video_duration)
+        else:
+            # Если аудио короче видео, повторяем аудио
+            audio_clips = []
+            while sum(clip.duration for clip in audio_clips) < video_duration:
+                audio_clips.append(audio)
+            audio = concatenate_audioclips(audio_clips)  # Конкатенируем клипы
+            audio = audio.subclip(0, video_duration)  # Убираем лишнее, если есть
 
-    # Используем функцию scrape с заголовками
-    insta_reel.scrape(headers=headers, session=requests.Session())
+        # Заменяем аудиодорожку
+        video = video.set_audio(audio)
+        
+        # Сохраняем новое видео
+        video.write_videofile(f"{path}/{result_name}.mp4", codec='libx264', audio_codec='aac')
+        return f"{path}/{result_name}.mp4"
+    except:
+        return None
 
-    # Скачиваем видео
-    insta_reel.download(fp=f"{path}/reel{int(time.time())}.mp4")
+    
 
 if __name__ == "__main__":
     print("Welcome to audio/video helper!")
     print("To download youtube video input 1\nTo extract audio from video input 2\nTo download audio from youtube "
-          "input 3\nTo download reels from instagram input 4\nTo read image\\video\\audio metadata input 5\n")
+          "input 3\nTo download reels from instagram input 4\nTo change audio on video 5\n")
     choise = int(input("Chose variant: "))
     if choise == 1:
         link = input("Give me the link: ")
@@ -115,7 +164,10 @@ if __name__ == "__main__":
 
     elif choise == 4:
         link = input("Give me the link: ")
-        download_reel(link)
+        download_instagram_reels(link)
+        print("Done!")
+    elif choise == 5:
+        replace_audio("подъем коленей высоко.mov", "Lou Reed - Perfect Day (Official Audio).mp3")
         print("Done!")
     else:
         print("I don`t know what u wanna do!")

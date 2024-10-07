@@ -30,6 +30,10 @@ class MetaDataState(StatesGroup):
 class SendAllState(StatesGroup):
     message = State()
 
+class ReplaceAudioState(StatesGroup):
+    video = State()
+    audio = State()
+
 @router.message(CommandStart())
 async def command_start_handler(message: Message, session: AsyncSession) -> None:
     file = "./texts/start_text.txt"
@@ -76,6 +80,21 @@ async def command_youtube_audio(message: Message, state: FSMContext, session: As
         await message.answer("Отправь мне ссылку на видео")
         await state.set_state(YoutubeState.link)
 
+@router.message(Command("reel"))
+async def command_reel(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    status = True
+    user = await db_commands.get_item(User, 'tg_id', message.from_user.id, message, session)
+    if user is None:
+        status = await db_commands.db_register_user(message, session)
+        if status:
+            user = await db_commands.get_item(User, 'tg_id', message.from_user.id, message, session)
+        else:
+            await message.answer("Произошла ошибка, повторите попытку позже!")
+    if status:
+        await state.update_data(command_type="reel")
+        await message.answer("Отправь мне ссылку на видео")
+        await state.set_state(YoutubeState.link)
+
 @router.message(Command("convert_to_audio"))
 async def command_convert_to_audio(message: Message, state: FSMContext, session: AsyncSession) -> None:
     status = True
@@ -89,6 +108,20 @@ async def command_convert_to_audio(message: Message, state: FSMContext, session:
     if status:
         await message.answer("Отправь мне видео")
         await state.set_state(VideoState.video)
+
+@router.message(Command("replace_audio"))
+async def command_replace_audio(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    status = True
+    user = await db_commands.get_item(User, 'tg_id', message.from_user.id, message, session)
+    if user is None:
+        status = await db_commands.db_register_user(message, session)
+        if status:
+            user = await db_commands.get_item(User, 'tg_id', message.from_user.id, message, session)
+        else:
+            await message.answer("Произошла ошибка, повторите попытку позже!")
+    if status:
+        await message.answer("Отправь мне видео")
+        await state.set_state(ReplaceAudioState.video)
 
 @router.message(Command("get_metadata"))
 async def command_get_metadata(message: Message, state: FSMContext, session: AsyncSession) -> None:
@@ -143,7 +176,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
                 if os.path.isfile(f"./videos/youtube/{filename}"):
                     os.remove(f"./videos/youtube/{filename}")
 
-    else:
+    elif state_info["command_type"] == 'audio':
         await message.answer("Подождите загружаем аудио...")
         filename = await worker.get_audio_from_youtube(link)
         if filename:
@@ -151,6 +184,16 @@ async def get_link(message: Message, state: FSMContext) -> None:
             if doc:
                 if os.path.isfile(f"./audio/youtube/{filename}"):
                     os.remove(f"./audio/youtube/{filename}")
+    elif state_info["command_type"] == 'reel':
+        await message.answer("Подождите загружаем reels...")
+        path = worker.download_instagram_reels(link)
+        if path:
+            doc = await message.answer_document(document=FSInputFile(path), caption="Ваш reels готов!")
+            if doc:
+                if os.path.isfile(path):
+                    os.remove(path)
+        else:
+            await message.answer("Произошла ошибка при загрузке reels. Попробуйте воспользоваться функцией позже.")
     await state.clear()
 
 @router.message(VideoState.video)
@@ -235,6 +278,72 @@ async def process_sendall(message: Message, session: AsyncSession, state: FSMCon
     await message.answer("Сообщение отправлено")
     await state.clear()
 
+@router.message(ReplaceAudioState.video)
+async def replace_audio_video(message: Message, state: FSMContext) -> None:
+    if message.content_type == ContentType.VIDEO:
+        await message.answer("Видео получено. Обрабатываем...")
+        video_id = message.video.file_id
+        video_name = message.video.file_name
+        rev = video_name[::-1]
+        tmp = rev.find('.')
+        filename = rev[:tmp:-1]
+        format = rev[tmp-1::-1]
+        video_file = await message.bot.get_file(video_id)
+        video_path = video_file.file_path  # Путь к загруженному видео
+        os.makedirs("./videos/for_replace/", exist_ok=True)
+        # Генерируем уникальное имя файла
+        ind = 1
+        while os.path.isfile(f"./videos/for_replace/{filename}.{format}"):
+            filename = filename + f"({ind})"
+            ind += 1
+        await message.bot.download_file(video_path, f"./videos/for_replace/{filename}.{format}")
+        video_path = f"./videos/for_replace/{filename}.{format}"
+        await set.update_data(videp=video_path)
+        await message.answer("Теперь отправь аудио.")
+        await state.set_state(ReplaceAudioState.audio)
+    else:
+        await message.answer("Отправьте видео.")
+
+@router.message(ReplaceAudioState.audio)
+async def replace_audio_audio(message: Message, state: FSMContext) -> None:
+    if message.content_type == ContentType.DOCUMENT:
+        if message.document.mime_type.startswith('audio/'):
+            os.makedirs("./audio/for_replace/", exist_ok=True)
+            audio_id = message.document.file_id
+            audio_name = message.document.file_name
+            rev = audio_name[::-1]
+            tmp = rev.find('.')
+            filename = rev[:tmp:-1]
+            format = rev[tmp-1::-1]
+            audio_tg = await message.bot.get_file(audio_id)
+            audio_path = audio_tg.file_path  # Путь к загруженному видео
+            ind = 1
+            while os.path.isfile(f"./audio/for_replace/{filename}.{format}"):
+                filename = filename + f"({ind})"
+                ind += 1
+            await message.bot.download_file(audio_path, f"./audio/for_replace/{filename}.{format}")
+            audio_path = f"./audio/for_replace/{filename}.{format}"
+            state.update_data(audio=audio_path)
+            data = await state.get_data()
+            result_path = worker.replace_audio(data['video'], data['audio'])
+            if result_path:
+                await message.answer_document(document=FSInputFile(result_path), caption="Ваше видео готово!")
+                if os.path.isfile(result_path):
+                    os.remove(result_path)
+            else:
+                await message.answer("Произошла ошибка, повторите попытку позже.")
+            if os.path.isfile(data['video']):
+                os.remove(data['video'])
+            if os.path.isfile(data['audio']):
+                os.remove(data['audio'])
+            await state.clear()
+        else:
+            await message.answer("Отправьте аудио.")
+    else:
+        await message.answer("Отправьте аудио.")
+    
+
+
 @router.message(Command("cancel"))
 @router.message(F.text.casefold() == "cancel")
 async def cancel_handler(message: Message, state: FSMContext):
@@ -243,6 +352,13 @@ async def cancel_handler(message: Message, state: FSMContext):
         return
 
     logging.info("Cancelling state %r", current_state)
+    data = await state.get_data()
+    if 'video' in data.keys():
+        if os.path.isfile(data['video']):
+                os.remove(data['video'])
+    if 'audio' in data.keys():
+        if os.path.isfile(data['audio']):
+                os.remove(data['audio'])
     await state.clear()
     await message.answer(
         "Cancelled.",
