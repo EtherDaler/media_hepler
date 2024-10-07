@@ -87,7 +87,7 @@ async def get_audio_from_youtube(link, path="./audio/youtube", out_format="mp3",
     return audio
 
 def download_instagram_reels(reels_url):
-    path = "./video/reels"
+    path = "./videos/reels"
     os.makedirs(path, exist_ok=True)
     i = reels_url.find("reel")
     j = reels_url[i+5:].find('/')
