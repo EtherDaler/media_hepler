@@ -299,7 +299,7 @@ async def replace_audio_video(message: Message, state: FSMContext) -> None:
             ind += 1
         await message.bot.download_file(video_path, f"./videos/for_replace/{filename}.{format}")
         video_path = f"./videos/for_replace/{filename}.{format}"
-        await set.update_data(videp=video_path)
+        await state.update_data(videp=video_path)
         await message.answer("Теперь отправь аудио.")
         await state.set_state(ReplaceAudioState.audio)
     else:
@@ -324,7 +324,7 @@ async def replace_audio_audio(message: Message, state: FSMContext) -> None:
                 ind += 1
             await message.bot.download_file(audio_path, f"./audio/for_replace/{filename}.{format}")
             audio_path = f"./audio/for_replace/{filename}.{format}"
-            state.update_data(audio=audio_path)
+            await state.update_data(audio=audio_path)
             data = await state.get_data()
             result_path = worker.replace_audio(data['video'], data['audio'])
             if result_path:
