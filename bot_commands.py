@@ -188,8 +188,11 @@ async def get_link(message: Message, state: FSMContext) -> None:
         await message.answer("Подождите загружаем reels...")
         path = worker.download_instagram_reels(link)
         if path:
-            doc = await message.answer_document(document=FSInputFile(path), caption="Ваш reels готов!\n@django_media_helper_bot")
+            reencoded_path = worker.reencode_video(path)
+            doc = await message.answer_document(document=FSInputFile(reencoded_path), caption="Ваш reels готов!\n@django_media_helper_bot")
             if doc:
+                if os.path.isfile(reencoded_path):
+                    os.remove(reencoded_path)
                 if os.path.isfile(path):
                     os.remove(path)
         else:

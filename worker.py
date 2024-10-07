@@ -6,6 +6,7 @@ import os
 import base64
 import yt_dlp
 import exifread
+import subprocess
 
 from moviepy.editor import VideoFileClip, AudioFileClip, concatenate_audioclips
 from pytube import YouTube
@@ -87,6 +88,16 @@ async def get_audio_from_youtube(link, path="./audio/youtube", out_format="mp3",
         os.remove(f"{video_path}/{video}")
     return audio
 
+def reencode_video(path_to_video):
+    output_path = path_to_video.replace('.mp4', '_reencoded.mp4')
+    command = [
+        'ffmpeg', '-i', path_to_video, 
+        '-c:v', 'libx264', '-c:a', 'aac', '-strict', 'experimental', 
+        '-movflags', 'faststart', output_path
+    ]
+    subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return output_path
+
 def download_instagram_reels(reels_url):
     path = "./videos/reels"
     os.makedirs(path, exist_ok=True)
@@ -100,6 +111,7 @@ def download_instagram_reels(reels_url):
     ydl_opts = {
         'outtmpl': f"{path}/{filename}.mp4",  # Имя файла для сохранения
         'cookiefile': './instagram.txt',  # Путь к файлу с cookies
+        'format': 'bestvideo+bestaudio/best'
     }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
