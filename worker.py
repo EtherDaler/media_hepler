@@ -41,7 +41,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     loop = asyncio.get_event_loop()
     result = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=True))
 
-    audio_title = result['title']
+    audio_title = result['title'].strip()
     audio_filename = f"{audio_title}.{out_format}"  # Форматирование имени файла
     return audio_filename if result is not None else None
 
@@ -61,6 +61,7 @@ def _convert_audio(video, path, out_format, filename):
         filename = filename + f"({ind})"
         ind += 1
     # Сохраняем аудио в нужном формате
+    filename = filename.strip()
     clip.audio.write_audiofile(f"{path}/{filename}.{out_format}")
     clip.close()
     return f"{filename}.{out_format}"
@@ -95,6 +96,7 @@ def download_instagram_reels(reels_url):
     while os.path.isfile(f"{path}/{filename}.mp4"):
         filename = filename + f"({ind})"
         ind += 1
+    filename = filename.strip()
     ydl_opts = {
         'outtmpl': f"{path}/{filename}.mp4",  # Имя файла для сохранения
         'cookiefile': './instagram.txt',  # Путь к файлу с cookies
@@ -106,12 +108,13 @@ def download_instagram_reels(reels_url):
     except:
         return None
     
-def replace_audio(video_path, audio_path, path="./video/for_replace/ready"):
+def replace_audio(video_path, audio_path, path="./videos/for_replace/ready"):
     os.makedirs(path, exist_ok=True)
     # Загружаем видео
     video_name = get_name_from_path(video_path)
     audio_name = get_name_from_path(audio_path)
     result_name = video_name + "_" + audio_name 
+    result_name = result_name.strip()
     try:
         video = VideoFileClip(video_path)
         

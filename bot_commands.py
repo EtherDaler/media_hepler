@@ -297,6 +297,7 @@ async def replace_audio_video(message: Message, state: FSMContext) -> None:
         while os.path.isfile(f"./videos/for_replace/{filename}.{format}"):
             filename = filename + f"({ind})"
             ind += 1
+        filename = filename.strip()
         await message.bot.download_file(video_path, f"./videos/for_replace/{filename}.{format}")
         video_path = f"./videos/for_replace/{filename}.{format}"
         await state.update_data(video=video_path)
@@ -328,6 +329,7 @@ async def replace_audio_audio(message: Message, state: FSMContext) -> None:
         while os.path.isfile(f"./audio/for_replace/{filename}.{format}"):
             filename = filename + f"({ind})"
             ind += 1
+        filename = filename.strip()
         await message.bot.download_file(audio_path, f"./audio/for_replace/{filename}.{format}")
         audio_path = f"./audio/for_replace/{filename}.{format}"
         await state.update_data(audio=audio_path)
@@ -339,10 +341,10 @@ async def replace_audio_audio(message: Message, state: FSMContext) -> None:
                 os.remove(result_path)
         else:
             await message.answer("Произошла ошибка, повторите попытку позже.")
-        if os.path.isfile(data.get('video')):
-            os.remove(data.get('video'))
-        if os.path.isfile(data.ge('audio')):
-            os.remove(data.get('audio'))
+        if os.path.isfile(data['video']):
+            os.remove(data['video'])
+        if os.path.isfile(data['audio']):
+            os.remove(data['audio'])
         await state.clear()
     else:
         await message.answer("Отправьте аудио.")
