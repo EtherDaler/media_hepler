@@ -171,7 +171,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
         await message.answer("Подождите загружаем видео...")
         filename = await worker.download_from_youtube(link)
         if filename:
-            doc = await message.answer_document(document=FSInputFile(f"./videos/youtube/{filename}"), caption="Ваше видео готово!")
+            doc = await message.answer_document(document=FSInputFile(f"./videos/youtube/{filename}"), caption="Ваше видео готово!\n@django_media_helper_bot")
             if doc:
                 if os.path.isfile(f"./videos/youtube/{filename}"):
                     os.remove(f"./videos/youtube/{filename}")
@@ -180,7 +180,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
         await message.answer("Подождите загружаем аудио...")
         filename = await worker.get_audio_from_youtube(link)
         if filename:
-            doc = await message.answer_document(document=FSInputFile(f"./audio/youtube/{filename}"), caption="Ваше аудио готово!")
+            doc = await message.answer_document(document=FSInputFile(f"./audio/youtube/{filename}"), caption="Ваше аудио готово!\n@django_media_helper_bot")
             if doc:
                 if os.path.isfile(f"./audio/youtube/{filename}"):
                     os.remove(f"./audio/youtube/{filename}")
@@ -188,7 +188,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
         await message.answer("Подождите загружаем reels...")
         path = worker.download_instagram_reels(link)
         if path:
-            doc = await message.answer_document(document=FSInputFile(path), caption="Ваш reels готов!")
+            doc = await message.answer_document(document=FSInputFile(path), caption="Ваш reels готов!\n@django_media_helper_bot")
             if doc:
                 if os.path.isfile(path):
                     os.remove(path)
@@ -218,7 +218,7 @@ async def process_video(message: Message, state: FSMContext) -> None:
         video_path = f"./videos/for_convert/{filename}.{format}"
         filename = await worker.convert_to_audio(video_path, filename=filename)
         # Отправляем извлечённое аудио обратно пользователю
-        doc = await message.answer_document(document=FSInputFile(f"./audio/converted/{filename}"), caption="Вот ваше аудио!")
+        doc = await message.answer_document(document=FSInputFile(f"./audio/converted/{filename}"), caption="Вот ваше аудио!\n@django_media_helper_bot")
         if doc:
             if os.path.isfile(f"./audio/converted/{filename}"):
                 os.remove(f"./audio/converted/{filename}")
@@ -257,6 +257,7 @@ async def process_metadata(message: Message, state: FSMContext) -> None:
             if meta:
                 strings = list(map(lambda x: f"{x}: {meta[x]}", meta.keys()))
                 result = "\n".join(strings)
+                result += "\n@django_media_helper_bot"
                 await message.answer("Метаданные готовы, если их нет, значит у файла изначально их небыло")
                 await message.answer(result)
                 await state.clear()
@@ -327,7 +328,7 @@ async def replace_audio_audio(message: Message, state: FSMContext) -> None:
             data = await state.get_data()
             result_path = worker.replace_audio(data['video'], data['audio'])
             if result_path:
-                await message.answer_document(document=FSInputFile(result_path), caption="Ваше видео готово!")
+                await message.answer_document(document=FSInputFile(result_path), caption="Ваше видео готово!\n@django_media_helper_bot")
                 if os.path.isfile(result_path):
                     os.remove(result_path)
             else:
