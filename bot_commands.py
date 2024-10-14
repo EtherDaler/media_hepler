@@ -2,6 +2,7 @@ import os
 import worker
 import metadata
 import logging
+import pinterest
 
 from aiogram import Router, F, Bot
 from aiogram.filters import Command, CommandStart
@@ -92,6 +93,21 @@ async def command_reel(message: Message, state: FSMContext, session: AsyncSessio
             await message.answer("Произошла ошибка, повторите попытку позже!")
     if status:
         await state.update_data(command_type="reel")
+        await message.answer("Отправь мне ссылку на видео")
+        await state.set_state(YoutubeState.link)
+
+@router.message(Command("pinterest_video"))
+async def command_pinterest_video(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    status = True
+    user = await db_commands.get_item(User, 'tg_id', message.from_user.id, message, session)
+    if user is None:
+        status = await db_commands.db_register_user(message, session)
+        if status:
+            user = await db_commands.get_item(User, 'tg_id', message.from_user.id, message, session)
+        else:
+            await message.answer("Произошла ошибка, повторите попытку позже!")
+    if status:
+        await state.update_data(command_type="pinterest")
         await message.answer("Отправь мне ссылку на видео")
         await state.set_state(YoutubeState.link)
 
@@ -197,6 +213,18 @@ async def get_link(message: Message, state: FSMContext) -> None:
                     os.remove(path)
         else:
             await message.answer("Произошла ошибка при загрузке reels. Попробуйте воспользоваться функцией позже.")
+
+    elif state_info["command_type"] == 'pinterest':
+        await message.answer("Подождите загружаем видео...")
+        filename = pinterest.download_pin(link)
+        if filename:
+            doc = await message.answer_document(document=FSInputFile(f"{filename}"),
+                                                caption="Ваше видео готово!\n@django_media_helper_bot")
+            if doc:
+                if os.path.isfile(f"{filename}"):
+                    os.remove(f"{filename}")
+        else:
+            await message.answer("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
     await state.clear()
 
 @router.message(VideoState.video)
