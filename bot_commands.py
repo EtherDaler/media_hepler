@@ -191,6 +191,10 @@ async def get_link(message: Message, state: FSMContext) -> None:
             if doc:
                 if os.path.isfile(f"./videos/youtube/{filename}"):
                     os.remove(f"./videos/youtube/{filename}")
+            else:
+                if os.path.isfile(f"./videos/youtube/{filename}"):
+                    os.remove(f"./videos/youtube/{filename}")
+                await message.answer("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
 
     elif state_info["command_type"] == 'audio':
         await message.answer("Подождите загружаем аудио...")
@@ -218,13 +222,15 @@ async def get_link(message: Message, state: FSMContext) -> None:
         await message.answer("Подождите загружаем видео...")
         filename = pinterest.download_pin(link)
         if filename:
-            doc = await message.answer_document(document=FSInputFile(f"{filename}"),
+            doc = await message.answer_document(document=FSInputFile(f"./videos/pinterest/{filename}.mp4"),
                                                 caption="Ваше видео готово!\n@django_media_helper_bot")
             if doc:
-                if os.path.isfile(f"{filename}"):
-                    os.remove(f"{filename}")
+                if os.path.isfile(f"./videos/pinterest/{filename}.mp4"):
+                    os.remove(f"./videos/pinterest/{filename}.mp4")
         else:
             await message.answer("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
+            if os.path.isfile(f"./videos/pinterest/{filename}.mp4"):
+                os.remove(f"./videos/pinterest/{filename}.mp4")
     await state.clear()
 
 @router.message(VideoState.video)

@@ -6,13 +6,13 @@ import re
 from datetime import datetime
 
 # Download function 
-def download_file(url, filename):
+def download_file(url, path='./videos/pinterest', filename='defaultpin', out_format='mp4'):
     response = requests.get(url, stream=True)
 
     file_size = int(response.headers.get('Content-Length', 0))
     progress = tqdm(response.iter_content(1024), f'Downloading {filename}', total=file_size, unit='B', unit_scale=True, unit_divisor=1024)
 
-    with open(filename, 'wb') as f:
+    with open(f"{path}/{filename}.{out_format}", 'wb') as f:
         for data in progress.iterable:
             # write data read to the file
             f.write(data)
@@ -64,5 +64,5 @@ def download_pin(url, path='./videos/pinterest', filename='defaultpin', out_form
         while os.path.isfile(f"{path}/{filename}.{out_format}"):
             filename = filename + f"({ind})"
             ind += 1
-        res = download_file(convert_url, f"{path}/{filename}.{out_format}")
+        res = download_file(convert_url, path, filename, out_format)
         return res
