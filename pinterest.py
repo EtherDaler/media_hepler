@@ -1,7 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 from tqdm import tqdm
-from os import system
+import os
 import re
 from datetime import datetime
 
