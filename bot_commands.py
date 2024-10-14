@@ -1,4 +1,7 @@
 import os
+
+from aiogram.exceptions import TelegramForbiddenError
+
 import worker
 import metadata
 import logging
@@ -312,7 +315,12 @@ async def process_sendall(message: Message, session: AsyncSession, state: FSMCon
     state_message = message.text
     for user in users:
         if user.tg_id != message.from_user.id:
-            await message.bot.send_message(user.tg_id, state_message)
+            try:
+                await message.bot.send_message(user.tg_id, state_message)
+            except TelegramForbiddenError:
+                continue
+            except:
+                continue
     await message.answer("Сообщение отправлено")
     await state.clear()
 
