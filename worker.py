@@ -51,7 +51,10 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     os.makedirs(path, exist_ok=True)
     # Функция для выполнения yt-dlp
     loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=True))
+    try:
+        result = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=True))
+    except:
+        return None
 
     video_title = result['title'].stip().replace('/', '⧸')
     video_filename = f"{video_title}.{out_format}"  # Форматирование имени файла

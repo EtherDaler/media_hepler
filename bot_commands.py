@@ -198,6 +198,8 @@ async def get_link(message: Message, state: FSMContext) -> None:
                 if os.path.isfile(f"./videos/youtube/{filename}"):
                     os.remove(f"./videos/youtube/{filename}")
                 await message.answer("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
+        else:
+            await message.answer("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
 
     elif state_info["command_type"] == 'audio':
         await message.answer("Подождите загружаем аудио...")
@@ -207,6 +209,8 @@ async def get_link(message: Message, state: FSMContext) -> None:
             if doc:
                 if os.path.isfile(f"./audio/youtube/{filename}"):
                     os.remove(f"./audio/youtube/{filename}")
+        else:
+            await message.answer("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
     elif state_info["command_type"] == 'reel':
         await message.answer("Подождите загружаем reels...")
         path = worker.download_instagram_reels(link)
