@@ -7,19 +7,29 @@ import base64
 import yt_dlp
 import exifread
 import subprocess
+import fnmatch
+import ffmpeg
 
 from moviepy.editor import VideoFileClip, AudioFileClip, concatenate_audioclips
 from pytube import YouTube
 from instascrape.scrapers import Reel
 from pprint import pprint
 
-import ffmpeg
 from PIL import Image, ExifTags
 
+
+def find(pattern, path):
+    result = []
+    for root, dirs, files in os.walk(path):
+        for name in files:
+            if fnmatch.fnmatch(name, pattern):
+                result.append(os.path.join(root, name))
+    return result
 
 
 def generate_session():
     return base64.b64encode(os.urandom(16))
+
 
 def get_name_from_path(path: str):
     filename = path.split("/")
@@ -43,9 +53,9 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     loop = asyncio.get_event_loop()
     result = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=True))
 
-    audio_title = result['title'].replace('/', u"\u2215")
-    audio_filename = f"{audio_title}.{out_format}"  # Форматирование имени файла
-    return audio_filename if result is not None else None
+    video_title = result['title'].replace('/', '⧸')
+    video_filename = f"{video_title}.{out_format}"  # Форматирование имени файла
+    return video_filename if result is not None else None
 
 
 async def convert_to_audio(video, path='./audio/converted', out_format="mp3", filename=None):
