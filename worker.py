@@ -53,7 +53,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     loop = asyncio.get_event_loop()
     result = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=True))
 
-    video_title = result['title'].replace('/', '⧸')
+    video_title = result['title'].stip().replace('/', '⧸')
     video_filename = f"{video_title}.{out_format}"  # Форматирование имени файла
     return video_filename if result is not None else None
 
