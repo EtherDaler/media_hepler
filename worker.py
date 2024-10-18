@@ -31,6 +31,7 @@ def get_name_from_path(path: str):
 
 async def download_from_youtube(link, path='./videos/youtube', out_format="mp4", res="720p", filename=None):
     po_token = "MnTT_c32vPYUIdPFFRKfxFLG21j22_tHNgtcxsnyI-BBLV8qkeyHs5ymawmenUy_VXvcmiGSA6BKQOwOf97daFTOMr0L_WimcA4MsiCKOaeiCiySQd0Ia15Asyt8gsbyVM9jsjIqjHnuFqYJPqAMaqeT1oPnuA=="
+    bad_characters = '\/:*?"<>|'
     ydl_opts = {
         'format': 'best',  # Выбор лучшего доступного качества
         'outtmpl': f'{path}/%(title)s.%(ext)s',  # Шаблон имени файла
@@ -42,7 +43,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     loop = asyncio.get_event_loop()
     result = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=True))
 
-    audio_title = result['title']
+    audio_title = result['title'].replace('/', u"\u2215")
     audio_filename = f"{audio_title}.{out_format}"  # Форматирование имени файла
     return audio_filename if result is not None else None
 
