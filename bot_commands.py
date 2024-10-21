@@ -30,7 +30,7 @@ def send_video_through_api(chat_id, file_path):
     FILE_PATH = file_path
 
     # Метод Telegram API для отправки видео
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendVideo"
+    url = f"https://127.0.0.1:8081/bot{BOT_TOKEN}/sendVideo"
 
     # Открываем файл и отправляем запрос
     with open(FILE_PATH, 'rb') as video:
