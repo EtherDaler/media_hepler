@@ -9,6 +9,7 @@ import exifread
 import subprocess
 import fnmatch
 import ffmpeg
+import subprocess
 
 from moviepy.editor import VideoFileClip, AudioFileClip, concatenate_audioclips
 from pytube import YouTube
@@ -37,6 +38,44 @@ def get_name_from_path(path: str):
     filename = filename.split(".")
     filename = filename[0]
     return filename
+
+
+def compress_video_ffmpeg(input_file, output_file, max_size_mb=50, path='./videos/youtube'):
+    """
+    Сжимает видеофайл до нужного размера (меньше 50 МБ).
+    Использует FFmpeg для сжатия видео.
+    """
+    # Определим максимальный размер в байтах
+    max_size_bytes = max_size_mb * 1024 * 1024
+    
+    # Проверим размер файла
+    file_size = os.path.getsize(f"{path}/{input_file}")
+    
+    if file_size <= max_size_bytes:
+        return input_file  # Если файл уже меньше или равен 50 МБ, просто возвращаем его
+    
+    # Параметры сжатия: снижаем битрейт и качество видео
+    command = [
+        'ffmpeg', '-i', f"{path}/{input_file}",
+        '-vcodec', 'libx264',  # Используем кодек H.264
+        '-crf', '28',  # Constant Rate Factor, компромисс между качеством и размером (22-28)
+        '-preset', 'fast',  # Настройка скорости сжатия
+        '-y',  # Перезаписываем выходной файл
+        f"{path}/{output_file}"
+    ]
+    
+    # Выполняем команду
+    subprocess.run(command, check=True)
+    
+    # Проверяем, уменьшился ли файл до нужного размера
+    output_size = os.path.getsize(f"{path}/{output_file}")
+    if output_size > max_size_bytes:
+        print(f"Warning: Video is still larger than {max_size_mb} MB.")
+
+    if os.path.isfile(f"{path}/{input_file}"):
+        os.remove(f"{path}/{input_file}")
+    
+    return output_file
 
 
 def compress_video(input_path, output_path, target_size_mb=50):
@@ -83,9 +122,8 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
         video_title = result['title'].strip().replace('/', '⧸').replace('|', '｜')
         video_filename = f"{video_title}.{out_format}"  # Форматирование имени файла
         compressed_filename = f"{video_title}-compressed.{out_format}"
-        if compress_video(f"{path}/{video_filename}", f"{path}/{compressed_filename}"):
-            return compressed_filename
-        return video_filename
+        filename = compress_video_ffmpeg(video_filename, compressed_filename)
+        return filename
     return None
 
 

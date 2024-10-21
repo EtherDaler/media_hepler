@@ -9,7 +9,7 @@ import pinterest
 
 from aiogram import Router, F, Bot
 from aiogram.filters import Command, CommandStart
-from aiogram.types import Message, FSInputFile, ContentType, ReplyKeyboardRemove
+from aiogram.types import Message, FSInputFile, ContentType, ReplyKeyboardRemove, ChatActions
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.exceptions import TelegramEntityTooLarge
@@ -181,7 +181,7 @@ async def send_all(message: Message, session: AsyncSession, state: FSMContext) -
             await message.answer("У вас нет прав!")
     else:
         await message.answer("У вас нет прав!")
-        
+
 
 @router.message(YoutubeState.link)
 async def get_link(message: Message, state: FSMContext) -> None:
@@ -189,6 +189,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
     state_info = await state.get_data()
     link = state_info['link']
     if state_info["command_type"] == 'video':
+        await message.bot.send_chat_action(message.chat.id, ChatActions.UPLOAD_VIDEO)
         await message.answer("Подождите загружаем видео...")
         filename = await worker.download_from_youtube(link)
         if filename:
@@ -210,6 +211,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
 
     elif state_info["command_type"] == 'audio':
         await message.answer("Подождите загружаем аудио...")
+        await message.bot.send_chat_action(message.chat.id, ChatActions.UPLOAD_AUDIO)
         filename = await worker.get_audio_from_youtube(link)
         if filename:
             doc = await message.answer_document(document=FSInputFile(f"./audio/youtube/{filename}"), caption="Ваше аудио готово!\n@django_media_helper_bot")
@@ -220,6 +222,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
             await message.answer("Извините, произошла ошибка. Видео недоступно!")
     elif state_info["command_type"] == 'reel':
         await message.answer("Подождите загружаем reels...")
+        await message.bot.send_chat_action(message.chat.id, ChatActions.UPLOAD_VIDEO)
         path = worker.download_instagram_reels(link)
         if path:
             reencoded_path = worker.reencode_video(path)
@@ -235,6 +238,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
 
     elif state_info["command_type"] == 'pinterest':
         await message.answer("Подождите загружаем видео...")
+        await message.bot.send_chat_action(message.chat.id, ChatActions.UPLOAD_VIDEO)
         filename = pinterest.download_pin(link)
         if filename:
             doc = await message.answer_document(document=FSInputFile(f"./videos/pinterest/{filename}.mp4"),
@@ -252,6 +256,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
 async def process_video(message: Message, state: FSMContext) -> None:
     if message.content_type == ContentType.VIDEO:
         await message.answer("Видео получено. Извлекаем аудио...")
+        await message.bot.send_chat_action(message.chat.id, ChatActions.UPLOAD_AUDIO)
         video_id = message.video.file_id
         video_name = message.video.file_name
         rev = video_name[::-1]
@@ -372,6 +377,7 @@ async def replace_audio_audio(message: Message, state: FSMContext) -> None:
     else:
         context = message.audio
     if cond1 or cond2:
+        await message.bot.send_chat_action(message.chat.id, ChatActions.UPLOAD_VIDEO)
         await message.answer("Аудио получено. Обрабатываем...")
         os.makedirs("./audio/for_replace/", exist_ok=True)
         audio_id = context.file_id
