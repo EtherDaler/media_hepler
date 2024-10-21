@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db import db_commands
 from data import config
 from models import User
+from fake_useragent import UserAgent
 
 
 router = Router()
@@ -31,11 +32,15 @@ def send_video_through_api(chat_id, file_path):
 
     # Метод Telegram API для отправки видео
     url = f"http://127.0.0.1:8081/bot{BOT_TOKEN}/sendVideo"
-    header = {
-        'User-Agent': 'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
-        'Accept': '*/*',
-        'Content-Type': 'multipart/form-data; boundary=<calculated when request is sent>'
+    headers = {
+        'User-Agent': UserAgent().random,
+        "Upgrade-Insecure-Requests": "1",
+        "DNT": "1",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate"
     }
+    session = requests.Session()
     # Открываем файл и отправляем запрос
     with open(FILE_PATH, 'rb') as video:
         files = {
@@ -46,7 +51,7 @@ def send_video_through_api(chat_id, file_path):
             'caption': 'Ваше видео готово!\n@django_media_helper_bot'
         }
         try:
-            response = requests.post(url, data=data, files=files, headers=header)
+            response = session.post(url, data=data, files=files, headers=headers)
         except Exception as e:
             print(e)
             return False
