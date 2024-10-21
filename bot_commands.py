@@ -42,8 +42,10 @@ def send_video_through_api(chat_id, file_path):
         }
         response = requests.post(url, data=data, files=files)
     if response.status_code == 200:
+        print("Большой файл успешно отправлен!")
         return True
     else:
+        print(f"Ошибка при отправке большого файла: {response.status_code}, {response.text}")
         False
 
 
