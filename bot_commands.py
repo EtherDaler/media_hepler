@@ -31,7 +31,11 @@ def send_video_through_api(chat_id, file_path):
 
     # Метод Telegram API для отправки видео
     url = f"http://127.0.0.1:8081/bot{BOT_TOKEN}/sendVideo"
-
+    header = {
+        'User-Agent': 'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+        'Content-Type': 'multipart/form-data; boundary=<calculated when request is sent>'
+    }
     # Открываем файл и отправляем запрос
     with open(FILE_PATH, 'rb') as video:
         files = {
@@ -42,7 +46,7 @@ def send_video_through_api(chat_id, file_path):
             'caption': 'Ваше видео готово!\n@django_media_helper_bot'
         }
         try:
-            response = requests.post(url, data=data, files=files)
+            response = requests.post(url, data=data, files=files, headers=header)
         except Exception as e:
             print(e)
             return False
@@ -86,6 +90,11 @@ async def command_start_handler(message: Message, session: AsyncSession) -> None
         with open(file, "r", encoding="utf-8") as f:
             command_start_text = f.read()
             await message.answer(command_start_text.format(message.from_user.full_name))
+
+@router.message(Command("donate"))
+async def command_donate(message: Message) -> None:
+    await message.answer("https://boosty.to/daler_hojimatov/donate - ссылка для оплаты.\n Спасибо за поддержку, ваши средства помогут поддерживать прект.")
+    
 
 @router.message(Command("youtube_video"))
 async def command_youtube_video(message: Message, state: FSMContext, session: AsyncSession) -> None:
