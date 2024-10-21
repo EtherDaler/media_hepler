@@ -56,7 +56,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     except:
         return None
 
-    video_title = result['title'].strip().replace('/', '⧸')
+    video_title = result['title'].strip().replace('/', '⧸').replace('|', '｜')
     video_filename = f"{video_title}.{out_format}"  # Форматирование имени файла
     return video_filename if result is not None else None
 
