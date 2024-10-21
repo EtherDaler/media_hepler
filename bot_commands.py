@@ -40,7 +40,10 @@ def send_video_through_api(chat_id, file_path):
         data = {
             'chat_id': CHAT_ID
         }
-        response = requests.post(url, data=data, files=files)
+        try:
+            response = requests.post(url, data=data, files=files)
+        except:
+            return False
     if response.status_code == 200:
         print("Большой файл успешно отправлен!")
         return True
@@ -234,7 +237,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
                 if not sended:
                     await message.answer("Извините, размер файла слишком большой для отправки по Telegram.")
                 if os.path.isfile(f"./videos/youtube/{filename}"):
-                        os.remove(f"./videos/youtube/{filename}")
+                    os.remove(f"./videos/youtube/{filename}")
         else:
             await message.answer("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
 
