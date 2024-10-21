@@ -6,7 +6,7 @@
   • /youtube_audio: Скачать аудио с YouTube
   • /reel: Скачать Instagram Reels
   • /pinterest_video: Скачать видео из Pinterest
-  • /replace_audio: Заменить аудиодорожку у видео
+  • /replace_audio: Заменить аудиодорожку в видео
   • /convert_to_audio: Вырезать аудиодорожку из видео
   • /get_metadata: Получить метаинформацию из файла
   • /donate: Поддержать автора

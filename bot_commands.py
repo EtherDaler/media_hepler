@@ -98,7 +98,7 @@ async def command_start_handler(message: Message, session: AsyncSession) -> None
 
 @router.message(Command("donate"))
 async def command_donate(message: Message) -> None:
-    await message.answer("https://boosty.to/daler_hojimatov/donate - ссылка для оплаты.\n Спасибо за поддержку, ваши средства помогут поддерживать прект.")
+    await message.answer("https://boosty.to/daler_hojimatov/donate - ссылка для оплаты.\n Спасибо за поддержку, ваши средства помогут поддерживать проект.")
     
 
 @router.message(Command("youtube_video"))
@@ -262,10 +262,12 @@ async def get_link(message: Message, state: FSMContext) -> None:
         await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VOICE)
         filename = await worker.get_audio_from_youtube(link)
         if filename:
-            doc = await message.answer_document(document=FSInputFile(f"./audio/youtube/{filename}"), caption="Ваше аудио готово!\n@django_media_helper_bot")
-            if doc:
-                if os.path.isfile(f"./audio/youtube/{filename}"):
-                    os.remove(f"./audio/youtube/{filename}")
+            try:
+                doc = await message.answer_document(document=FSInputFile(f"./audio/youtube/{filename}"), caption="Ваше аудио готово!\n@django_media_helper_bot")
+            except TelegramEntityTooLarge:
+                await message.answer("Извините, размер файла слишком большой для отправки по Telegram.")
+            if os.path.isfile(f"./audio/youtube/{filename}"):
+                os.remove(f"./audio/youtube/{filename}")
         else:
             await message.answer("Извините, произошла ошибка. Видео недоступно!")
     elif state_info["command_type"] == 'reel':
