@@ -212,7 +212,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
 
     elif state_info["command_type"] == 'audio':
         await message.answer("Подождите загружаем аудио...")
-        await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_AUDIO)
+        await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VOICE)
         filename = await worker.get_audio_from_youtube(link)
         if filename:
             doc = await message.answer_document(document=FSInputFile(f"./audio/youtube/{filename}"), caption="Ваше аудио готово!\n@django_media_helper_bot")
@@ -257,7 +257,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
 async def process_video(message: Message, state: FSMContext) -> None:
     if message.content_type == ContentType.VIDEO:
         await message.answer("Видео получено. Извлекаем аудио...")
-        await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_AUDIO)
+        await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VOICE)
         video_id = message.video.file_id
         video_name = message.video.file_name
         rev = video_name[::-1]
