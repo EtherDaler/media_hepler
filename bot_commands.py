@@ -1,26 +1,50 @@
 import os
-
-from aiogram.exceptions import TelegramForbiddenError
-
 import worker
 import metadata
 import logging
 import pinterest
+import requests
 
 from aiogram import Router, F, Bot
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message, FSInputFile, ContentType, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.exceptions import TelegramEntityTooLarge
+from aiogram.exceptions import TelegramEntityTooLarge, TelegramForbiddenError
 from aiogram.enums.chat_action import ChatAction
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import db_commands
+from data import config
 from models import User
 
 
 router = Router()
+
+
+def send_video_through_api(chat_id, file_path):
+    BOT_TOKEN = config.BOT_TOKEN
+    # Ваш chat_id или chat_id того пользователя, которому нужно отправить файл
+    CHAT_ID = chat_id
+    # Путь к видео, которое нужно отправить
+    FILE_PATH = file_path
+
+    # Метод Telegram API для отправки видео
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendVideo"
+
+    # Открываем файл и отправляем запрос
+    with open(FILE_PATH, 'rb') as video:
+        files = {
+            'video': video
+        }
+        data = {
+            'chat_id': CHAT_ID
+        }
+        response = requests.post(url, data=data, files=files)
+    if response.status_code == 200:
+        return True
+    else:
+        False
 
 
 class YoutubeState(StatesGroup):
@@ -204,7 +228,9 @@ async def get_link(message: Message, state: FSMContext) -> None:
                         os.remove(f"./videos/youtube/{filename}")
                     await message.answer("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
             except TelegramEntityTooLarge:
-                await message.answer("Извините, размер файла слишком большой для отправки по Telegram.")
+                sended = send_video_through_api(message.chat.id, f"./videos/youtube/{filename}")
+                if not sended:
+                    await message.answer("Извините, размер файла слишком большой для отправки по Telegram.")
                 if os.path.isfile(f"./videos/youtube/{filename}"):
                         os.remove(f"./videos/youtube/{filename}")
         else:

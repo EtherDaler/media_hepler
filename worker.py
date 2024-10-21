@@ -47,6 +47,7 @@ def compress_video_ffmpeg(input_file, output_file, max_size_mb=50, path='./video
     """
     # Определим максимальный размер в байтах
     max_size_bytes = max_size_mb * 1024 * 1024
+    up_threashhold = 100 * 1024 * 1024
     
     # Проверим размер файла
     file_size = os.path.getsize(f"{path}/{input_file}")
@@ -122,8 +123,8 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
         video_title = result['title'].strip().replace('/', '⧸').replace('|', '｜')
         video_filename = f"{video_title}.{out_format}"  # Форматирование имени файла
         compressed_filename = f"{video_title}-compressed.{out_format}"
-        filename = compress_video_ffmpeg(video_filename, compressed_filename)
-        return filename
+        #filename = compress_video_ffmpeg(video_filename, compressed_filename)
+        return video_filename
     return None
 
 
