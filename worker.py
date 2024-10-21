@@ -39,6 +39,30 @@ def get_name_from_path(path: str):
     return filename
 
 
+def compress_video(input_path, output_path, target_size_mb=2000):
+    # Получаем размер файла в мегабайтах
+    file_size_mb = os.path.getsize(input_path) / (1024 * 1024)
+    
+    # Если размер больше указанного порога
+    if file_size_mb > target_size_mb:
+        print(f"Видео {input_path} имеет размер {file_size_mb:.2f} МБ, что больше {target_size_mb} МБ.")
+        print("Запуск сжатия...")
+
+        # Открываем видеофайл с помощью moviepy
+        video = VideoFileClip(input_path)
+
+        # Пример сжатия, уменьшив битрейт
+        video.write_videofile(output_path, bitrate="500k", codec="libx264", audio_codec="aac")
+        
+        print(f"Видео сжато и сохранено как {output_path}")
+        if os.path.isfile(f"{input_path}"):
+            os.remove(f"{input_path}")
+        return True
+    else:
+        print(f"Размер видео {input_path} ({file_size_mb:.2f} МБ) меньше {target_size_mb} МБ. Сжатие не требуется.")
+        return False
+
+
 async def download_from_youtube(link, path='./videos/youtube', out_format="mp4", res="720p", filename=None):
     po_token = "MnTT_c32vPYUIdPFFRKfxFLG21j22_tHNgtcxsnyI-BBLV8qkeyHs5ymawmenUy_VXvcmiGSA6BKQOwOf97daFTOMr0L_WimcA4MsiCKOaeiCiySQd0Ia15Asyt8gsbyVM9jsjIqjHnuFqYJPqAMaqeT1oPnuA=="
     bad_characters = '\/:*?"<>|'
@@ -55,10 +79,17 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
         result = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=True))
     except:
         return None
-
-    video_title = result['title'].strip().replace('/', '⧸').replace('|', '｜')
-    video_filename = f"{video_title}.{out_format}"  # Форматирование имени файла
-    return video_filename if result is not None else None
+    if result is not None:
+        video_title = result['title'].strip().replace('/', '⧸').replace('|', '｜')
+        video_filename = f"{video_title}.{out_format}"  # Форматирование имени файла
+        compressed_filename = f"{video_title}-compressed.{out_format}"
+        if compress_video(f"{path}/{video_filename}", f"{path}/{compressed_filename}"):
+            file_size_mb = os.path.getsize(f"{path}/{compressed_filename}") / (1024 * 1024)
+            if file_size_mb > 2000:
+                return None
+            return compressed_filename
+        return video_filename
+    return None
 
 
 async def convert_to_audio(video, path='./audio/converted', out_format="mp3", filename=None):
