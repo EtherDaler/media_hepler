@@ -39,7 +39,7 @@ def get_name_from_path(path: str):
     return filename
 
 
-def compress_video(input_path, output_path, target_size_mb=2000):
+def compress_video(input_path, output_path, target_size_mb=50):
     # Получаем размер файла в мегабайтах
     file_size_mb = os.path.getsize(input_path) / (1024 * 1024)
     
@@ -84,9 +84,6 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
         video_filename = f"{video_title}.{out_format}"  # Форматирование имени файла
         compressed_filename = f"{video_title}-compressed.{out_format}"
         if compress_video(f"{path}/{video_filename}", f"{path}/{compressed_filename}"):
-            file_size_mb = os.path.getsize(f"{path}/{compressed_filename}") / (1024 * 1024)
-            if file_size_mb > 2000:
-                return None
             return compressed_filename
         return video_filename
     return None

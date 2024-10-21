@@ -12,6 +12,7 @@ from aiogram.filters import Command, CommandStart
 from aiogram.types import Message, FSInputFile, ContentType, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.exceptions import TelegramEntityTooLarge
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import db_commands
@@ -180,6 +181,7 @@ async def send_all(message: Message, session: AsyncSession, state: FSMContext) -
             await message.answer("У вас нет прав!")
     else:
         await message.answer("У вас нет прав!")
+        
 
 @router.message(YoutubeState.link)
 async def get_link(message: Message, state: FSMContext) -> None:
@@ -190,14 +192,19 @@ async def get_link(message: Message, state: FSMContext) -> None:
         await message.answer("Подождите загружаем видео...")
         filename = await worker.download_from_youtube(link)
         if filename:
-            doc = await message.answer_document(document=FSInputFile(f"./videos/youtube/{filename}"), caption="Ваше видео готово!\n@django_media_helper_bot")
-            if doc:
+            try:
+                doc = await message.answer_document(document=FSInputFile(f"./videos/youtube/{filename}"), caption="Ваше видео готово!\n@django_media_helper_bot")
+                if doc:
+                    if os.path.isfile(f"./videos/youtube/{filename}"):
+                        os.remove(f"./videos/youtube/{filename}")
+                else:
+                    if os.path.isfile(f"./videos/youtube/{filename}"):
+                        os.remove(f"./videos/youtube/{filename}")
+                    await message.answer("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
+            except TelegramEntityTooLarge:
+                await message.answer("Извините, размер файла слишком большой для отправки по Telegram.")
                 if os.path.isfile(f"./videos/youtube/{filename}"):
-                    os.remove(f"./videos/youtube/{filename}")
-            else:
-                if os.path.isfile(f"./videos/youtube/{filename}"):
-                    os.remove(f"./videos/youtube/{filename}")
-                await message.answer("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
+                        os.remove(f"./videos/youtube/{filename}")
         else:
             await message.answer("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
 
@@ -222,6 +229,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
                     os.remove(reencoded_path)
                 if os.path.isfile(path):
                     os.remove(path)
+
         else:
             await message.answer("Произошла ошибка при загрузке reels. Попробуйте воспользоваться функцией позже.")
 
