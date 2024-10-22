@@ -120,7 +120,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     except:
         return None
     if result is not None:
-        video_title = result['title'].strip().replace('/', '⧸').replace('|', '｜')
+        video_title = result['title'].strip().replace('/', '⧸').replace('|', '｜').replace('?', '？')
         video_filename = f"{video_title}.{out_format}"  # Форматирование имени файла
         compressed_filename = f"{video_title}-compressed.{out_format}"
         #filename = compress_video_ffmpeg(video_filename, compressed_filename)
