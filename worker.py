@@ -198,7 +198,8 @@ def download_instagram_reels(reels_url):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([reels_url])
         return f"{path}/{filename}.mp4"
-    except:
+    except Exception as e:
+        print(e)
         return None
     
 def replace_audio(video_path, audio_path, path="./videos/for_replace/ready"):
