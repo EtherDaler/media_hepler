@@ -275,7 +275,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
                 await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал аудио из #YouTube")
             except TelegramEntityTooLarge:
                 await message.answer("Извините, размер файла слишком большой для отправки по Telegram.")
-                await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать аудио из #YouTube")
+                await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать аудио из #YouTube, размер файла слишком большой")
             if os.path.isfile(f"./audio/youtube/{filename}"):
                 os.remove(f"./audio/youtube/{filename}")
         else:
