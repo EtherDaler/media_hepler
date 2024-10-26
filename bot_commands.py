@@ -256,7 +256,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
                 sended = send_video_through_api(message.chat.id, f"./videos/youtube/{filename}")
                 if not sended:
                     await message.answer("Извините, размер файла слишком большой для отправки по Telegram.")
-                    await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #YouTube")
+                    await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #YouTube, размер файла слишком большой")
                 else:
                     await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #YouTube")
                 if os.path.isfile(f"./videos/youtube/{filename}"):
