@@ -234,6 +234,8 @@ async def get_link(message: Message, state: FSMContext) -> None:
     await state.update_data(link = message.text)
     state_info = await state.get_data()
     link = state_info['link']
+    user_id = message.from_user.id
+    username = message.from_user.username
     if state_info["command_type"] == 'video':
         await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)
         await message.answer("Подождите загружаем видео...")
@@ -241,6 +243,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
         if filename:
             try:
                 doc = await message.answer_document(document=FSInputFile(f"./videos/youtube/{filename}"), caption="Ваше видео готово!\n@django_media_helper_bot")
+                await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #YouTube")
                 if doc:
                     if os.path.isfile(f"./videos/youtube/{filename}"):
                         os.remove(f"./videos/youtube/{filename}")
@@ -248,14 +251,19 @@ async def get_link(message: Message, state: FSMContext) -> None:
                     if os.path.isfile(f"./videos/youtube/{filename}"):
                         os.remove(f"./videos/youtube/{filename}")
                     await message.answer("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
+                    await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #YouTube")
             except TelegramEntityTooLarge:
                 sended = send_video_through_api(message.chat.id, f"./videos/youtube/{filename}")
                 if not sended:
                     await message.answer("Извините, размер файла слишком большой для отправки по Telegram.")
+                    await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #YouTube")
+                else:
+                    await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #YouTube")
                 if os.path.isfile(f"./videos/youtube/{filename}"):
                     os.remove(f"./videos/youtube/{filename}")
         else:
             await message.answer("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
+            await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #YouTube")
 
     elif state_info["command_type"] == 'audio':
         await message.answer("Подождите загружаем аудио...")
@@ -264,12 +272,15 @@ async def get_link(message: Message, state: FSMContext) -> None:
         if filename:
             try:
                 doc = await message.answer_document(document=FSInputFile(f"./audio/youtube/{filename}"), caption="Ваше аудио готово!\n@django_media_helper_bot")
+                await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал аудио из #YouTube")
             except TelegramEntityTooLarge:
                 await message.answer("Извините, размер файла слишком большой для отправки по Telegram.")
+                await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать аудио из #YouTube")
             if os.path.isfile(f"./audio/youtube/{filename}"):
                 os.remove(f"./audio/youtube/{filename}")
         else:
             await message.answer("Извините, произошла ошибка. Видео недоступно!")
+            await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать аудио из #YouTube")
     elif state_info["command_type"] == 'reel':
         await message.answer("Подождите загружаем reels...")
         await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)
@@ -277,6 +288,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
         if path:
             reencoded_path = worker.reencode_video(path)
             doc = await message.answer_document(document=FSInputFile(reencoded_path), caption="Ваш reels готов!\n@django_media_helper_bot")
+            await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #reels")
             if doc:
                 if os.path.isfile(reencoded_path):
                     os.remove(reencoded_path)
@@ -285,6 +297,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
 
         else:
             await message.answer("Произошла ошибка при загрузке reels. Попробуйте воспользоваться функцией позже.")
+            await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #reels")
 
     elif state_info["command_type"] == 'pinterest':
         await message.answer("Подождите загружаем видео...")
@@ -293,11 +306,13 @@ async def get_link(message: Message, state: FSMContext) -> None:
         if filename:
             doc = await message.answer_document(document=FSInputFile(f"./videos/pinterest/{filename}.mp4"),
                                                 caption="Ваше видео готово!\n@django_media_helper_bot")
+            await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #Pinterest")
             if doc:
                 if os.path.isfile(f"./videos/pinterest/{filename}.mp4"):
                     os.remove(f"./videos/pinterest/{filename}.mp4")
         else:
             await message.answer("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
+            await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #Pinterest")
             if os.path.isfile(f"./videos/pinterest/{filename}.mp4"):
                 os.remove(f"./videos/pinterest/{filename}.mp4")
     await state.clear()
@@ -305,6 +320,8 @@ async def get_link(message: Message, state: FSMContext) -> None:
 @router.message(VideoState.video)
 async def process_video(message: Message, state: FSMContext) -> None:
     if message.content_type == ContentType.VIDEO:
+        user_id = message.from_user.id
+        username = message.from_user.username
         await message.answer("Видео получено. Извлекаем аудио...")
         await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VOICE)
         video_id = message.video.file_id
@@ -326,6 +343,7 @@ async def process_video(message: Message, state: FSMContext) -> None:
         filename = await worker.convert_to_audio(video_path, filename=filename)
         # Отправляем извлечённое аудио обратно пользователю
         doc = await message.answer_document(document=FSInputFile(f"./audio/converted/{filename}"), caption="Вот ваше аудио!\n@django_media_helper_bot")
+        await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно извлек аудио #audio_cut")
         if doc:
             if os.path.isfile(f"./audio/converted/{filename}"):
                 os.remove(f"./audio/converted/{filename}")
@@ -338,6 +356,8 @@ async def process_video(message: Message, state: FSMContext) -> None:
 @router.message(MetaDataState.file)
 async def process_metadata(message: Message, state: FSMContext) -> None:
     if message.content_type == ContentType.DOCUMENT:
+        user_id = message.from_user.id
+        username = message.from_user.username
         condition = message.document.mime_type.startswith('image/') \
             or message.document.mime_type.startswith('video/') \
             or message.document.mime_type.startswith('audio/')
@@ -367,9 +387,11 @@ async def process_metadata(message: Message, state: FSMContext) -> None:
                 result += "\n@django_media_helper_bot"
                 await message.answer("Метаданные готовы, если их нет, значит у файла изначально их небыло")
                 await message.answer(result)
+                await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно извлек метаданные #meta")
                 await state.clear()
             else:
                 await message.answer("Произошла ошибка, возможно файл пока не поддерживается.")
+                await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог извлечь метаданные #meta")
                 await state.clear()
             if os.path.isfile(f"{file_path}"):
                 os.remove(f"{file_path}")
@@ -420,6 +442,8 @@ async def replace_audio_video(message: Message, state: FSMContext) -> None:
 
 @router.message(ReplaceAudioState.audio)
 async def replace_audio_audio(message: Message, state: FSMContext) -> None:
+    user_id = message.from_user.id
+    username = message.from_user.username
     cond1 = message.content_type == ContentType.DOCUMENT and message.document.mime_type.startswith('audio/')
     cond2 = message.content_type == ContentType.AUDIO
     if cond1:
@@ -450,10 +474,12 @@ async def replace_audio_audio(message: Message, state: FSMContext) -> None:
         result_path = worker.replace_audio(data.get('video'), data.get('audio'))
         if result_path:
             await message.answer_document(document=FSInputFile(result_path), caption="Ваше видео готово!\n@django_media_helper_bot")
+            await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно заменил аудио в видео #replace_audio")
             if os.path.isfile(result_path):
                 os.remove(result_path)
         else:
             await message.answer("Произошла ошибка, повторите попытку позже.")
+            await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог заменить аудио в видео #replace_audio")
         if os.path.isfile(data['video']):
             os.remove(data['video'])
         if os.path.isfile(data['audio']):

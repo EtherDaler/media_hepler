@@ -9,7 +9,7 @@ from aiogram.types import Message
 from sqlalchemy.orm import selectinload
 
 from models import User
-from data.config import ADMINS
+from data.config import ADMINS, DEV_CHANEL_ID
 
 
 async def db_add_to_db(item, message: Message, session: AsyncSession):
@@ -159,6 +159,9 @@ async def db_register_user(message: Message, session: AsyncSession):
     try:
         await session.commit()
         await session.refresh(user)
+        user_id = message.from_user.id
+        username = message.from_user.username
+        await message.bot.send_message(chat_id=DEV_CHANEL_ID, text=f"Новый пользователь зарегистрировался: @{username} (ID: {user_id})")
         return True
     except IntegrityError:
         await message.answer("Произошла ошибка при регистрации пользователя!")

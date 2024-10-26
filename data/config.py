@@ -14,3 +14,5 @@ DB_PORT = os.environ.get("DB_PORT")
 DB_PATH = f"postgresql+asyncpg://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 ADMINS = os.environ.get("ADMINS").split()
+
+DEV_CHANEL_ID = os.environ.get("DEV_CHANEL_ID")
