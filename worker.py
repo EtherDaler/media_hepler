@@ -103,11 +103,12 @@ def compress_video(input_path, output_path, target_size_mb=50):
         return False
 
 
-async def download_from_youtube(link, path='./videos/youtube', out_format="mp4", res="720p", filename=None):
+async def download_from_youtube(link, path='./videos/youtube', out_format="mp4", res="1080p", filename=None):
     po_token = "MnTT_c32vPYUIdPFFRKfxFLG21j22_tHNgtcxsnyI-BBLV8qkeyHs5ymawmenUy_VXvcmiGSA6BKQOwOf97daFTOMr0L_WimcA4MsiCKOaeiCiySQd0Ia15Asyt8gsbyVM9jsjIqjHnuFqYJPqAMaqeT1oPnuA=="
     bad_characters = '\/:*?"<>|'
     ydl_opts = {
-        'format': 'best',  # Выбор лучшего доступного качества
+        'format': 'bestvideo[height=1080]+bestaudio/best[height=1080]',  # Выбор лучшего доступного качества
+        'merge_output_format': out_format,
         'outtmpl': f'{path}/%(title)s.%(ext)s',  # Шаблон имени файла
         'noplaylist': True,  # Скачивание только одного видео, если это плейлист
         'cookiefile': './cookies.txt'
