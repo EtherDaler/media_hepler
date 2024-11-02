@@ -109,7 +109,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     ydl_opts = {
         'format': 'bestvideo[height=1080]+bestaudio/best[height=1080]',  # Выбор лучшего доступного качества
         'merge_output_format': out_format,
-        'outtmpl': f'{path}/%(title)s.%(ext)s',  # Шаблон имени файла
+        'outtmpl': f'{path}/%(title)s.{out_format}',  # Шаблон имени файла
         'noplaylist': True,  # Скачивание только одного видео, если это плейлист
         'cookiefile': './cookies.txt'
     }
