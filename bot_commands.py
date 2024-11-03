@@ -23,7 +23,7 @@ from fake_useragent import UserAgent
 router = Router()
 
 
-def send_video_through_api(chat_id, file_path):
+def send_video_through_api(chat_id, file_path, width, height):
     BOT_TOKEN = config.BOT_TOKEN
     # Ваш chat_id или chat_id того пользователя, которому нужно отправить файл
     CHAT_ID = chat_id
@@ -48,7 +48,9 @@ def send_video_through_api(chat_id, file_path):
         }
         data = {
             'chat_id': CHAT_ID,
-            'caption': 'Ваше видео готово!\n@django_media_helper_bot'
+            'caption': 'Ваше видео готово!\n@django_media_helper_bot',
+            'width': width,
+            'height': height
         }
         try:
             response = session.post(url, data=data, files=files, headers=headers)
@@ -241,10 +243,11 @@ async def get_link(message: Message, state: FSMContext) -> None:
         await message.answer("Подождите загружаем видео...")
         filename = await worker.download_from_youtube(link)
         if filename:
+            width, height = worker.get_video_resolution_moviepy(f"./videos/youtube/{filename}")
             try:
                 #reencoded_path = worker.reencode_video(f"./videos/youtube/{filename}")
                 #doc = await message.answer_video(video=video_file, caption='Ваше видео готово!\n@django_media_helper_bot')
-                doc = await message.bot.send_video(message.chat.id, FSInputFile(f"./videos/youtube/{filename}"), caption='Ваше видео готово!\n@django_media_helper_bot', supports_streaming=True)
+                doc = await message.bot.send_video(message.chat.id, FSInputFile(f"./videos/youtube/{filename}"), caption='Ваше видео готово!\n@django_media_helper_bot', supports_streaming=True, width=width, height=height)
                 #doc = await message.answer_document(document=FSInputFile(f"./videos/youtube/{filename}"), caption="Ваше видео готово!\n@django_media_helper_bot")
                 await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #YouTube")
                 if doc:
@@ -260,7 +263,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
                     await message.answer("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
                     await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #YouTube")
             except TelegramEntityTooLarge:
-                sended = send_video_through_api(message.chat.id, f"./videos/youtube/{filename}")
+                sended = send_video_through_api(message.chat.id, f"./videos/youtube/{filename}", width, height)
                 if not sended:
                     await message.answer("Извините, размер файла слишком большой для отправки по Telegram.")
                     await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #YouTube, размер файла слишком большой")

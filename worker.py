@@ -238,6 +238,21 @@ def replace_audio(video_path, audio_path, path="./videos/for_replace/ready"):
         return f"{path}/{result_name}.mp4"
     except:
         return None
+    
+def get_video_resolution_moviepy(video_path):
+    """Получает разрешение видеофайла с помощью moviepy.
+
+    Args:
+    video_path: Путь к видеофайлу.
+
+    Returns:
+    Кортеж (ширина, высота).
+    """
+
+    clip = VideoFileClip(video_path)
+    width, height = clip.size
+    clip.close()
+    return width, height
 
     
 
