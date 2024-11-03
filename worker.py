@@ -103,19 +103,14 @@ def compress_video(input_path, output_path, target_size_mb=50):
         return False
 
 
-async def download_from_youtube(link, path='./videos/youtube', out_format="mp4", res="1080p", filename=None):
+async def download_from_youtube(link, path='./videos/youtube', out_format="mp4", res="720p", filename=None):
     po_token = "MnTT_c32vPYUIdPFFRKfxFLG21j22_tHNgtcxsnyI-BBLV8qkeyHs5ymawmenUy_VXvcmiGSA6BKQOwOf97daFTOMr0L_WimcA4MsiCKOaeiCiySQd0Ia15Asyt8gsbyVM9jsjIqjHnuFqYJPqAMaqeT1oPnuA=="
     bad_characters = '\/:*?"<>|'
     ydl_opts = {
-        'format': 'bestvideo+bestaudio/best',  # Выбор лучшего доступного качества
+        'format': 'best',  # Выбор лучшего доступного качества
         'outtmpl': f'{path}/%(title)s.%(ext)s',  # Шаблон имени файла
         'noplaylist': True,  # Скачивание только одного видео, если это плейлист
-        'cookiefile': './cookies.txt',
-        'merge_output_format': out_format,
-        'postprocessors': [{  # Добавьте обработчик постобработки
-            'key': 'FFmpegVideoConvertor',
-            'preferedformat': 'mp4',  # Убедитесь, что формат mp4
-        }],
+        'cookiefile': './cookies.txt'
     }
     os.makedirs(path, exist_ok=True)
     # Функция для выполнения yt-dlp
@@ -127,7 +122,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     if result is not None:
         video_title = result['title'].strip().replace('/', '⧸').replace('|', '｜').replace('?', '？').replace(':', '：')
         video_filename = f"{video_title}.{out_format}"  # Форматирование имени файла
-        #compressed_filename = f"{video_title}-compressed.{out_format}"
+        compressed_filename = f"{video_title}-compressed.{out_format}"
         #filename = compress_video_ffmpeg(video_filename, compressed_filename)
         return video_filename
     return None

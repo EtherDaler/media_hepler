@@ -242,19 +242,19 @@ async def get_link(message: Message, state: FSMContext) -> None:
         filename = await worker.download_from_youtube(link)
         if filename:
             try:
-                reencoded_path = worker.reencode_video(f"./videos/youtube/{filename}")
+                #reencoded_path = worker.reencode_video(f"./videos/youtube/{filename}")
                 #doc = await message.answer_video(video=video_file, caption='Ваше видео готово!\n@django_media_helper_bot')
-                doc = await message.bot.send_video(message.chat.id, FSInputFile(f"{reencoded_path}"), caption='Ваше видео готово!\n@django_media_helper_bot', supports_streaming=True)
+                doc = await message.bot.send_video(message.chat.id, FSInputFile(f"./videos/youtube/{filename}"), caption='Ваше видео готово!\n@django_media_helper_bot', supports_streaming=True)
                 #doc = await message.answer_document(document=FSInputFile(f"./videos/youtube/{filename}"), caption="Ваше видео готово!\n@django_media_helper_bot")
                 await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #YouTube")
                 if doc:
-                    if os.path.isfile(reencoded_path):
-                        os.remove(reencoded_path)
+                    #if os.path.isfile(reencoded_path):
+                    #    os.remove(reencoded_path)
                     if os.path.isfile(f"./videos/youtube/{filename}"):
                         os.remove(f"./videos/youtube/{filename}")
                 else:
-                    if os.path.isfile(reencoded_path):
-                        os.remove(reencoded_path)
+                    #if os.path.isfile(reencoded_path):
+                    #    os.remove(reencoded_path)
                     if os.path.isfile(f"./videos/youtube/{filename}"):
                         os.remove(f"./videos/youtube/{filename}")
                     await message.answer("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
