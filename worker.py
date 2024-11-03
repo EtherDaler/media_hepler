@@ -112,6 +112,10 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
         'noplaylist': True,  # Скачивание только одного видео, если это плейлист
         'cookiefile': './cookies.txt',
         'merge_output_format': out_format,
+        'postprocessors': [{  # Добавьте обработчик постобработки
+            'key': 'FFmpegVideoConvertor',
+            'preferedformat': 'mp4',  # Убедитесь, что формат mp4
+        }],
     }
     os.makedirs(path, exist_ok=True)
     # Функция для выполнения yt-dlp
