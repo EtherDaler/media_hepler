@@ -242,7 +242,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
         filename = await worker.download_from_youtube(link)
         if filename:
             try:
-                video_file = FSInputFile(video=f"./videos/youtube/{filename}")
+                video_file = FSInputFile(f"./videos/youtube/{filename}")
                 #doc = await message.answer_video(video=video_file, caption='Ваше видео готово!\n@django_media_helper_bot')
                 doc = await message.bot.send_video(message.chat.id, video_file, caption='Ваше видео готово!\n@django_media_helper_bot')
                 #doc = await message.answer_document(document=FSInputFile(f"./videos/youtube/{filename}"), caption="Ваше видео готово!\n@django_media_helper_bot")
