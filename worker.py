@@ -10,6 +10,7 @@ import subprocess
 import fnmatch
 import ffmpeg
 import subprocess
+import random
 
 from moviepy.editor import VideoFileClip, AudioFileClip, concatenate_audioclips
 from pytube import YouTube
@@ -189,18 +190,24 @@ def download_instagram_reels(reels_url):
         filename = filename + f"({ind})"
         ind += 1
     filename = filename.strip()
-    ydl_opts = {
-        'outtmpl': f"{path}/{filename}.mp4",  # Имя файла для сохранения
-        'cookiefile': './instagram.txt',  # Путь к файлу с cookies
-        'format': 'bestvideo+bestaudio/best'
-    }
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([reels_url])
-        return f"{path}/{filename}.mp4"
-    except Exception as e:
-        print(e)
-        return None
+    cookies = ['0', '1', '2']
+    while len(cookies) > 0:
+        cookie = random.choice(cookies)
+        try:
+            ydl_opts = {
+                'outtmpl': f"{path}/{filename}.mp4",  # Имя файла для сохранения
+                'cookiefile': f'./instagram{cookie}.txt',  # Путь к файлу с cookies
+                'format': 'bestvideo+bestaudio/best',
+                'retries': 3
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([reels_url])
+            return f"{path}/{filename}.mp4"
+        except Exception as e:
+            cookies.remove(cookie)
+            print(e)
+            print("Get another cookie")
+    return None
     
 def replace_audio(video_path, audio_path, path="./videos/for_replace/ready"):
     os.makedirs(path, exist_ok=True)
