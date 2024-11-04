@@ -198,7 +198,9 @@ def download_instagram_reels(reels_url):
                 'outtmpl': f"{path}/{filename}.mp4",  # Имя файла для сохранения
                 'cookiefile': f'./instagram{cookie}.txt',  # Путь к файлу с cookies
                 'format': 'bestvideo+bestaudio/best',
-                'retries': 3
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
+                }
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([reels_url])
