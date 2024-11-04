@@ -206,7 +206,7 @@ def download_instagram_reels(reels_url):
         except Exception as e:
             cookies.remove(cookie)
             print(e)
-            print("Get another cookie")
+            print(f"Get another cookie: ./instagram{cookie}.txt")
     return None
     
 def replace_audio(video_path, audio_path, path="./videos/for_replace/ready"):
