@@ -110,11 +110,11 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     bad_characters = '\/:*?"<>|'
     ydl_opts = {
         'format': f'bestvideo[height<={res}]+bestaudio/best',
-        'outtmpl': f'{path}/%(title)s.%(ext)s',  # Use %(ext)s
+        'outtmpl': f'{path}/%(title)s.%(final_ext)s',
         'noplaylist': True,
         'cookiefile': './cookies.txt',
         'verbose': True,
-        'restrictfilenames': True,
+        'restrictfilenames': True,  # Ограничиваем имя файла допустимыми символами
         'postprocessors': [
             {
                 'key': 'FFmpegVideoConvertor',
