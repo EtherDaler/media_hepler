@@ -243,7 +243,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
         await message.answer("Подождите загружаем видео...")
         filename = await worker.download_from_youtube(link)
         if filename:
-            width, height = worker.get_video_resolution_moviepy(filename)
+            width, height = worker.get_video_resolution_moviepy(f"./videos/youtube/{filename}")
             try:
                 #reencoded_path = worker.reencode_video(f"./videos/youtube/{filename}")
                 #doc = await message.answer_video(video=video_file, caption='Ваше видео готово!\n@django_media_helper_bot')

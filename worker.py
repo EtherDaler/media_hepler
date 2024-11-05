@@ -124,7 +124,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
         return None
     if result is not None:
         video_title = result['title'].strip().replace('/', '⧸').replace('|', '｜').replace('?', '？').replace(':', '：')
-        video_filename = os.path.join(path, f"{video_title}.{result['ext']}")  # Форматирование имени файла
+        video_filename = f"{video_title}.{result['ext']}"
         # # Если файл не в формате mp4, конвертируем его в mp4
         # if result['ext'] == 'webm':
         #     output_file = os.path.join(path, f"{video_title}.mp4")
