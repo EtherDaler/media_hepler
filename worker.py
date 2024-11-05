@@ -114,7 +114,6 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
         'noplaylist': True,
         'cookiefile': './cookies.txt',
         'verbose': True,
-        'restrictfilenames': True,
     }
     os.makedirs(path, exist_ok=True)
     # Функция для выполнения yt-dlp
