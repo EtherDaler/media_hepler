@@ -130,7 +130,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
             try:
                 downloaded_file_escaped = shlex.quote(video_filename)
                 output_file_escaped = shlex.quote(output_file)
-                ffmpeg.input(video_filename).output(output_file).run()
+                ffmpeg.input(downloaded_file_escaped).output(output_file_escaped).run()
                 os.remove(video_filename)  # Удаляем оригинальный файл, если он не в mp4
                 return output_file  # Возвращаем путь к mp4 файлу
             except ffmpeg.Error as e:
