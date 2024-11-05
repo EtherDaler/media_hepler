@@ -110,11 +110,12 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     bad_characters = '\/:*?"<>|'
     ydl_opts = {
         'format': f'bestvideo[height<={res}]+bestaudio/best',  # Выбор лучшего доступного качества
-        'outtmpl': f'{path}/%(title)s.%(final_ext)s',  # Шаблон имени файла
+        'outtmpl': f'{path}/%(title)s.mp4',  # Шаблон имени файла
         'noplaylist': True,  # Скачивание только одного видео, если это плейлист
         'cookiefile': './cookies.txt',
         'recodevideo': 'mp4',
         'verbose': True,
+        'postprocessor_args': ['-loglevel', 'debug'],
     }
     os.makedirs(path, exist_ok=True)
     # Функция для выполнения yt-dlp
