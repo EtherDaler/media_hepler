@@ -109,18 +109,12 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     po_token = "MnTT_c32vPYUIdPFFRKfxFLG21j22_tHNgtcxsnyI-BBLV8qkeyHs5ymawmenUy_VXvcmiGSA6BKQOwOf97daFTOMr0L_WimcA4MsiCKOaeiCiySQd0Ia15Asyt8gsbyVM9jsjIqjHnuFqYJPqAMaqeT1oPnuA=="
     bad_characters = '\/:*?"<>|'
     ydl_opts = {
-        'format': f'bestvideo[height<={res}]+bestaudio/best',
-        'outtmpl': f'{path}/%(title)s.%(final_ext)s',
+        'format': 'best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best',  # Выбор лучшего доступного формата MP4
+        'outtmpl': f'{path}/%(title)s.%(ext)s',
         'noplaylist': True,
         'cookiefile': './cookies.txt',
         'verbose': True,
-        'restrictfilenames': True,  # Ограничиваем имя файла допустимыми символами
-        'postprocessors': [
-            {
-                'key': 'FFmpegVideoConvertor',
-                'preferredformat': 'mp4',
-            },
-        ],
+        'restrictfilenames': True,
     }
     os.makedirs(path, exist_ok=True)
     # Функция для выполнения yt-dlp
@@ -131,8 +125,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
         return None
     if result is not None:
         video_title = result['title'].strip().replace('/', '⧸').replace('|', '｜').replace('?', '？').replace(':', '：')
-        final_ext = result.get('final_ext', 'mp4')
-        video_filename = f"{video_title}.{final_ext}"
+        video_filename = f"{video_title}.{result['ext']}"
         # # Если файл не в формате mp4, конвертируем его в mp4
         # if result['ext'] == 'webm':
         #     output_file = os.path.join(path, f"{video_title}.mp4")
