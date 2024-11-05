@@ -108,7 +108,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     po_token = "MnTT_c32vPYUIdPFFRKfxFLG21j22_tHNgtcxsnyI-BBLV8qkeyHs5ymawmenUy_VXvcmiGSA6BKQOwOf97daFTOMr0L_WimcA4MsiCKOaeiCiySQd0Ia15Asyt8gsbyVM9jsjIqjHnuFqYJPqAMaqeT1oPnuA=="
     bad_characters = '\/:*?"<>|'
     ydl_opts = {
-        'format': f'bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4',  # Выбор лучшего доступного качества
+        'format': f'bestvideo[height<={res}]+bestaudio/best',  # Выбор лучшего доступного качества
         'outtmpl': f'{path}/%(title)s.%(ext)s',  # Шаблон имени файла
         'noplaylist': True,  # Скачивание только одного видео, если это плейлист
         'cookiefile': './cookies.txt'
@@ -122,7 +122,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
         return None
     if result is not None:
         video_title = result['title'].strip().replace('/', '⧸').replace('|', '｜').replace('?', '？').replace(':', '：')
-        video_filename = f"{video_title}.{out_format}"  # Форматирование имени файла
+        video_filename = f"{video_title}.{result['ext']}"  # Форматирование имени файла
         compressed_filename = f"{video_title}-compressed.{out_format}"
         #filename = compress_video_ffmpeg(video_filename, compressed_filename)
         return video_filename
