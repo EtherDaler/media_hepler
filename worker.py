@@ -112,7 +112,8 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
         'format': f'bestvideo[height<={res}]+bestaudio/best',  # Выбор лучшего доступного качества
         'outtmpl': f'{path}/%(title)s.%(ext)s',  # Шаблон имени файла
         'noplaylist': True,  # Скачивание только одного видео, если это плейлист
-        'cookiefile': './cookies.txt'
+        'cookiefile': './cookies.txt',
+        'merge_output_format': 'mp4',
     }
     os.makedirs(path, exist_ok=True)
     # Функция для выполнения yt-dlp
@@ -122,23 +123,27 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     except:
         return None
     if result is not None:
-        video_title = result['title'].strip().replace('/', '⧸').replace('|', '｜').replace('?', '？').replace(':', '：')
-        video_filename = os.path.join(path, f"{video_title}.{result['ext']}")  # Форматирование имени файла
-        # Если файл не в формате mp4, конвертируем его в mp4
-        if result['ext'] == 'webm':
-            output_file = os.path.join(path, f"{video_title}.mp4")
-            try:
-                downloaded_file_escaped = shlex.quote(os.path.abspath(video_filename))
-                output_file_escaped = shlex.quote(os.path.abspath(output_file))
-                print(f"Downloaded file path: {downloaded_file_escaped}")
-                print(f"Output file path: {output_file_escaped}")
-                if not os.path.exists(video_filename):
-                    print(f"File does not exist: {path}/{video_filename}")
-                ffmpeg.input(downloaded_file_escaped).output(output_file_escaped).run()
-                os.remove(video_filename)  # Удаляем оригинальный файл, если он не в mp4
-                return output_file  # Возвращаем путь к mp4 файлу
-            except ffmpeg.Error as e:
-                print(f"FFmpeg error: {e}")
+        video_filename = result.get('_filename')
+        if not os.path.exists(video_filename):
+            print(f"File does not exist: {video_filename}")
+            return None
+        # video_title = result['title'].strip().replace('/', '⧸').replace('|', '｜').replace('?', '？').replace(':', '：')
+        # video_filename = os.path.join(path, f"{video_title}.{result['ext']}")  # Форматирование имени файла
+        # # Если файл не в формате mp4, конвертируем его в mp4
+        # if result['ext'] == 'webm':
+        #     output_file = os.path.join(path, f"{video_title}.mp4")
+        #     try:
+        #         downloaded_file_escaped = shlex.quote(os.path.abspath(video_filename))
+        #         output_file_escaped = shlex.quote(os.path.abspath(output_file))
+        #         print(f"Downloaded file path: {downloaded_file_escaped}")
+        #         print(f"Output file path: {output_file_escaped}")
+        #         if not os.path.exists(video_filename):
+        #             print(f"File does not exist: {path}/{video_filename}")
+        #         ffmpeg.input(downloaded_file_escaped).output(output_file_escaped).run()
+        #         os.remove(video_filename)  # Удаляем оригинальный файл, если он не в mp4
+        #         return output_file  # Возвращаем путь к mp4 файлу
+        #     except ffmpeg.Error as e:
+        #         print(f"FFmpeg error: {e}")
         #compressed_filename = f"{video_title}-compressed.{out_format}"
         #filename = compress_video_ffmpeg(video_filename, compressed_filename)
         return video_filename
