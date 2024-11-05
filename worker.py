@@ -123,16 +123,16 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
         return None
     if result is not None:
         video_title = result['title'].strip().replace('/', '⧸').replace('|', '｜').replace('?', '？').replace(':', '：')
-        video_filename = f"{video_title}.{result['ext']}"  # Форматирование имени файла
+        video_filename = os.path.join(path, f"{video_title}.{result['ext']}")  # Форматирование имени файла
         # Если файл не в формате mp4, конвертируем его в mp4
         if result['ext'] == 'webm':
             output_file = os.path.join(path, f"{video_title}.mp4")
             try:
-                downloaded_file_escaped = shlex.quote(os.path.abspath(f"{path}/{video_title}.webm"))
-                output_file_escaped = shlex.quote(os.path.abspath(f"{output_file}"))
+                downloaded_file_escaped = shlex.quote(os.path.abspath(video_filename))
+                output_file_escaped = shlex.quote(os.path.abspath(output_file))
                 print(f"Downloaded file path: {downloaded_file_escaped}")
                 print(f"Output file path: {output_file_escaped}")
-                if not os.path.exists(f"{video_filename}"):
+                if not os.path.exists(video_filename):
                     print(f"File does not exist: {path}/{video_filename}")
                 ffmpeg.input(downloaded_file_escaped).output(output_file_escaped).run()
                 os.remove(video_filename)  # Удаляем оригинальный файл, если он не в mp4
