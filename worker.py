@@ -11,6 +11,7 @@ import fnmatch
 import ffmpeg
 import subprocess
 import random
+import shlex
 
 from moviepy.editor import VideoFileClip, AudioFileClip, concatenate_audioclips
 from pytube import YouTube
