@@ -133,7 +133,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
                 print(f"Downloaded file path: {downloaded_file_escaped}")
                 print(f"Output file path: {output_file_escaped}")
                 if not os.path.exists(f"{path}/{video_filename}"):
-                    print(f"File does not exist: {f"{path}/{video_filename}"}")
+                    print(f"File does not exist: {f"{path}/{video_filename}"}"})
                 ffmpeg.input(downloaded_file_escaped).output(output_file_escaped).run()
                 os.remove(video_filename)  # Удаляем оригинальный файл, если он не в mp4
                 return output_file  # Возвращаем путь к mp4 файлу
