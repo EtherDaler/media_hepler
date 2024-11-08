@@ -100,7 +100,7 @@ async def command_start_handler(message: Message, session: AsyncSession) -> None
 
 @router.message(Command("donate"))
 async def command_donate(message: Message) -> None:
-    await message.answer("https://boosty.to/daler_hojimatov/donate - ссылка для оплаты.\n Спасибо за поддержку, ваши средства помогут поддерживать проект.")
+    await message.answer("https://boosty.to/daler_hojimatov/donate \nhttps://www.donationalerts.com/r/etherdaler \nссылки для оплаты.\nСпасибо за поддержку, ваши средства помогут поддерживать проект.")
     
 
 @router.message(Command("youtube_video"))
