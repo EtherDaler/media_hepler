@@ -12,6 +12,7 @@ import ffmpeg
 import subprocess
 import random
 import shlex
+import re
 
 from moviepy.editor import VideoFileClip, AudioFileClip, concatenate_audioclips
 from pytube import YouTube
@@ -106,8 +107,6 @@ def compress_video(input_path, output_path, target_size_mb=50):
 
 
 async def download_from_youtube(link, path='./videos/youtube', out_format="mp4", res="720p", filename=None):
-    po_token = "MnTT_c32vPYUIdPFFRKfxFLG21j22_tHNgtcxsnyI-BBLV8qkeyHs5ymawmenUy_VXvcmiGSA6BKQOwOf97daFTOMr0L_WimcA4MsiCKOaeiCiySQd0Ia15Asyt8gsbyVM9jsjIqjHnuFqYJPqAMaqeT1oPnuA=="
-    bad_characters = '\/:*?"<>|'
     ydl_opts = {
         'format': 'bestvideo[vcodec~="^avc"][height<=1080]+bestaudio[acodec~="^mp4a"]/best[vcodec~="^avc"]/best',
         'outtmpl': f'{path}/%(title)s.%(ext)s',
@@ -123,7 +122,22 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     except:
         return None
     if result is not None:
-        video_title = result['title'].strip().replace('/', '⧸').replace('|', '｜').replace('?', '？').replace(':', '：')
+        replacements = {
+            '/': '⧸',     # Прямой слэш
+            '\\': '⧹',    # Обратный слэш
+            '|': '｜',     # Вертикальная черта
+            '?': '？',     # Вопросительный знак
+            '*': '＊',     # Звёздочка
+            ':': '：',     # Двоеточие
+            '"': '＂',     # Двойные кавычки
+            '<': '＜',     # Меньше
+            '>': '＞',     # Больше
+        }
+        video_title = result['title'].strip()
+        for old, new in replacements.items():
+            video_title = video_title.replace(old, new)
+        #video_title = result['title'].strip().replace('/', '⧸').replace('|', '｜').replace('?', '？').replace(':', '：').replace('"', '＂')
+        video_title = re.sub(r'[\x00-\x1F\x7F]', '', video_title)
         video_filename = f"{video_title}.{result['ext']}"
         # # Если файл не в формате mp4, конвертируем его в mp4
         # if result['ext'] == 'webm':
