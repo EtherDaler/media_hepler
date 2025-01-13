@@ -57,6 +57,8 @@ def send_video_through_api(chat_id, file_path, width, height):
         except Exception as e:
             print(e)
             return False
+    if os.path.isfile(FILE_PATH):
+        os.remove(FILE_PATH)
     if response.status_code == 200:
         print("Большой файл успешно отправлен!")
         return True
@@ -250,16 +252,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
                 doc = await message.bot.send_video(message.chat.id, FSInputFile(f"./videos/youtube/{filename}"), caption='Ваше видео готово!\n@django_media_helper_bot', supports_streaming=True, width=width, height=height)
                 #doc = await message.answer_document(document=FSInputFile(f"./videos/youtube/{filename}"), caption="Ваше видео готово!\n@django_media_helper_bot")
                 await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #YouTube")
-                if doc:
-                    #if os.path.isfile(reencoded_path):
-                    #    os.remove(reencoded_path)
-                    if os.path.isfile(f"./videos/youtube/{filename}"):
-                        os.remove(f"./videos/youtube/{filename}")
-                else:
-                    #if os.path.isfile(reencoded_path):
-                    #    os.remove(reencoded_path)
-                    if os.path.isfile(f"./videos/youtube/{filename}"):
-                        os.remove(f"./videos/youtube/{filename}")
+                if not doc:
                     await message.answer("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
                     await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #YouTube")
             except TelegramEntityTooLarge:
@@ -269,11 +262,19 @@ async def get_link(message: Message, state: FSMContext) -> None:
                     await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #YouTube, размер файла слишком большой")
                 else:
                     await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #YouTube")
+            except Exception as e:
+                print(e)
+            finally:
                 if os.path.isfile(f"./videos/youtube/{filename}"):
                     os.remove(f"./videos/youtube/{filename}")
         else:
             await message.answer("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
             await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #YouTube")
+            try:
+                if os.path.isfile(f"./videos/youtube/{filename}"):
+                    os.remove(f"./videos/youtube/{filename}")
+            except Exception as e:
+                print(e)
 
     elif state_info["command_type"] == 'audio':
         await message.answer("Подождите загружаем аудио...")
@@ -302,12 +303,14 @@ async def get_link(message: Message, state: FSMContext) -> None:
             if doc:
                 if os.path.isfile(reencoded_path):
                     os.remove(reencoded_path)
-                if os.path.isfile(path):
-                    os.remove(path)
-
         else:
             await message.answer("Произошла ошибка при загрузке reels. Попробуйте воспользоваться функцией позже.")
             await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #reels")
+        try:            
+            if os.path.isfile(path):
+                os.remove(path)
+        except Exception as e:
+            print(e)
 
     elif state_info["command_type"] == 'pinterest':
         await message.answer("Подождите загружаем видео...")
