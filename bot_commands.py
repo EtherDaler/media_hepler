@@ -22,6 +22,8 @@ from fake_useragent import UserAgent
 
 router = Router()
 
+logger = logging.getLogger(__name__)
+
 
 def send_video_through_api(chat_id, file_path, width, height):
     BOT_TOKEN = config.BOT_TOKEN
@@ -55,15 +57,15 @@ def send_video_through_api(chat_id, file_path, width, height):
         try:
             response = session.post(url, data=data, files=files, headers=headers)
         except Exception as e:
-            print(e)
+            logger.error(e)
             return False
     if os.path.isfile(FILE_PATH):
         os.remove(FILE_PATH)
     if response.status_code == 200:
-        print("Большой файл успешно отправлен!")
+        logger.info("Большой файл успешно отправлен!")
         return True
     else:
-        print(f"Ошибка при отправке большого файла: {response.status_code}, {response.text}")
+        logger.error(f"Ошибка при отправке большого файла: {response.status_code}, {response.text}")
         False
 
 
@@ -263,7 +265,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
                 else:
                     await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #YouTube")
             except Exception as e:
-                print(e)
+                logger.error(e)
             finally:
                 if os.path.isfile(f"./videos/youtube/{filename}"):
                     os.remove(f"./videos/youtube/{filename}")
@@ -274,7 +276,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
                 if os.path.isfile(f"./videos/youtube/{filename}"):
                     os.remove(f"./videos/youtube/{filename}")
             except Exception as e:
-                print(e)
+                logger.error(e)
 
     elif state_info["command_type"] == 'audio':
         await message.answer("Подождите загружаем аудио...")
