@@ -22,51 +22,59 @@ from fake_useragent import UserAgent
 
 router = Router()
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+BOT_TOKEN = config.BOT_TOKEN
 
 
 def send_video_through_api(chat_id, file_path, width, height):
-    BOT_TOKEN = config.BOT_TOKEN
-    # Ваш chat_id или chat_id того пользователя, которому нужно отправить файл
-    CHAT_ID = chat_id
-    # Путь к видео, которое нужно отправить
-    FILE_PATH = file_path
+    """
+    Отправка видео в Telegram через API.
 
-    # Метод Telegram API для отправки видео
+    :param chat_id: ID чата (получателя)
+    :param file_path: Путь к видеофайлу
+    :param width: Ширина видео
+    :param height: Высота видео
+    :return: True, если успешно отправлено, иначе False
+    """
+    # Telegram API URL
     url = f"http://127.0.0.1:8081/bot{BOT_TOKEN}/sendVideo"
-    headers = {
-        'User-Agent': UserAgent().random,
-        "Upgrade-Insecure-Requests": "1",
-        "DNT": "1",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
-        "Accept-Encoding": "gzip, deflate"
-    }
-    session = requests.Session()
-    # Открываем файл и отправляем запрос
-    with open(FILE_PATH, 'rb') as video:
-        files = {
-            'video': video
-        }
-        data = {
-            'chat_id': CHAT_ID,
-            'caption': 'Ваше видео готово!\n@django_media_helper_bot',
-            'width': width,
-            'height': height
-        }
+    
+    # Проверяем существование файла
+    if not os.path.isfile(file_path):
+        logger.error(f"Файл {file_path} не найден.")
+        return False
+
+    # Отправка запроса
+    try:
+        with open(file_path, 'rb') as video:
+            files = {'video': video}
+            data = {
+                'chat_id': chat_id,
+                'caption': 'Ваше видео готово!\n@django_media_helper_bot',
+                'width': width,
+                'height': height
+            }
+            response = requests.post(url, data=data, files=files)
+    except Exception as e:
+        logger.error(f"Ошибка при отправке видео: {e}")
+        return False
+
+    # Удаляем файл после отправки
+    if os.path.isfile(file_path):
         try:
-            response = session.post(url, data=data, files=files, headers=headers)
+            os.remove(file_path)
+            logger.info(f"Файл {file_path} успешно удален после отправки.")
         except Exception as e:
-            logger.error(e)
-            return False
-    if os.path.isfile(FILE_PATH):
-        os.remove(FILE_PATH)
+            logger.warning(f"Не удалось удалить файл {file_path}: {e}")
+
+    # Проверяем статус ответа
     if response.status_code == 200:
-        logger.info("Большой файл успешно отправлен!")
+        logger.info("Видео успешно отправлено!")
         return True
     else:
-        logger.error(f"Ошибка при отправке большого файла: {response.status_code}, {response.text}")
-        False
+        logger.error(f"Ошибка при отправке видео: {response.status_code}, {response.text}")
+        return False
 
 
 class YoutubeState(StatesGroup):
