@@ -94,6 +94,10 @@ class ReplaceAudioState(StatesGroup):
     video = State()
     audio = State()
 
+class AnswerState(StatesGroup):
+    tg_id = State()
+    message = State()
+
 @router.message(CommandStart())
 async def command_start_handler(message: Message, session: AsyncSession) -> None:
     file = "./texts/start_text.txt"
@@ -237,6 +241,18 @@ async def send_all(message: Message, session: AsyncSession, state: FSMContext) -
         if user.is_admin:
             await message.answer("Напишите сообщение")
             await state.set_state(SendAllState.message)
+        else:
+            await message.answer("У вас нет прав!")
+    else:
+        await message.answer("У вас нет прав!")
+
+@router.message(Command('answer'))
+async def answer(message: Message, session: AsyncSession, state: FSMContext) -> None:
+    user = await db_commands.get_item(User, 'tg_id', message.from_user.id, message, session)
+    if user is not None:
+        if user.is_admin:
+            await message.answer("Укажите tg_id пользователя")
+            await state.set_state(AnswerState.tg_id)
         else:
             await message.answer("У вас нет прав!")
     else:
@@ -510,6 +526,24 @@ async def replace_audio_audio(message: Message, state: FSMContext) -> None:
         await state.clear()
     else:
         await message.answer("Отправьте аудио.")
+
+@router.message(AnswerState.tg_id)
+async def process_tg_id(message: Message, state: FSMContext) -> None:
+    await state.update_data(tg_id = message.text)
+    await message.answer("Отправьте сообщение пользователю")
+    await state.set_state(AnswerState.message)
+
+
+@router.message(AnswerState.message)
+async def process_answer(message: Message, state: FSMContext) -> None:
+    await state.update_data(message = message.text)
+    state_info = await state.get_data()
+    try:
+        await message.bot.send_message(state_info['tg_id'], state_info['message'])
+        await message.answer("Сообщение успешно отправлено пользователю")
+    except TelegramForbiddenError:
+        await message.answer("Пользователь заблокировал бота")
+    await state.clear()
     
 
 
