@@ -341,7 +341,11 @@ async def get_link(message: Message, state: FSMContext) -> None:
     elif state_info["command_type"] == 'pinterest':
         await message.answer("Подождите загружаем видео...")
         await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)
-        filename = pinterest.download_pin(link)
+        try:
+            filename = pinterest.download_pin(link)
+        except Exception as e:
+            logger.error(e)
+            filename = None
         if filename:
             doc = await message.answer_document(document=FSInputFile(f"./videos/pinterest/{filename}.mp4"),
                                                 caption="Ваше видео готово!\n@django_media_helper_bot")

@@ -49,12 +49,12 @@ def download_pin(url, path='./videos/pinterest', filename='defaultpin', out_form
         print("Fetched content Sucessfull.")
         ''' extracting the url
         <video
-            autoplay="" class="hwa kVc MIw L4E"
+            autoplay="" class="hwa"
             src="https://v1.pinimg.com/videos/mc/hls/......m3u8"
             ....
         ></video>
         '''
-        extract_url = (soup.find("video",class_="hwa kVc MIw L4E"))['src']
+        extract_url = (soup.find("video",class_="hwa"))['src']
         # converting m3u8 to V_720P's url
         convert_url = extract_url.replace("hls","720p").replace("m3u8","mp4")
         print("Downloading file now!")
