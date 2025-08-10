@@ -269,7 +269,11 @@ async def get_link(message: Message, state: FSMContext) -> None:
     if state_info["command_type"] == 'video':
         await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)
         await message.answer("Подождите загружаем видео...")
-        filename = await worker.download_from_youtube(link)
+        try:
+            filename = await worker.download_from_youtube(link)
+        except Exception as e:
+            logger.error(e)
+            filename = None
         if filename:
             width, height = worker.get_video_resolution_moviepy(f"./videos/youtube/{filename}")
             try:
@@ -305,7 +309,11 @@ async def get_link(message: Message, state: FSMContext) -> None:
     elif state_info["command_type"] == 'audio':
         await message.answer("Подождите загружаем аудио...")
         await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VOICE)
-        filename = await worker.get_audio_from_youtube(link)
+        try:
+            filename = await worker.get_audio_from_youtube(link)
+        except Exception as e:
+            logger.error(e)
+            filename = None    
         if filename:
             try:
                 doc = await message.answer_document(document=FSInputFile(f"./audio/youtube/{filename}"), caption="Ваше аудио готово!\n@django_media_helper_bot")
@@ -321,7 +329,11 @@ async def get_link(message: Message, state: FSMContext) -> None:
     elif state_info["command_type"] == 'reel':
         await message.answer("Подождите загружаем reels...")
         await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)
-        path = worker.download_instagram_reels(link)
+        try:
+            path = worker.download_instagram_reels(link)
+        except Exception as e:
+            logger.error(e)
+            filename = None
         if path:
             reencoded_path = worker.reencode_video(path)
             doc = await message.answer_document(document=FSInputFile(reencoded_path), caption="Ваш reels готов!\n@django_media_helper_bot")
