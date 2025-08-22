@@ -14,7 +14,7 @@ import random
 import shlex
 import re
 
-from moviepy.editor import VideoFileClip, AudioFileClip, concatenate_audioclips
+from moviepy import VideoFileClip, AudioFileClip, concatenate_audioclips
 from pytube import YouTube
 from instascrape.scrapers import Reel
 from pprint import pprint
@@ -113,14 +113,44 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
         'noplaylist': True,
         'cookiefile': './cookies.txt',
         'verbose': True,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'web'],
+                'skip': ['dash', 'hls']
+            }
+        },
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'referer': 'https://www.youtube.com/',
+        'socket_timeout': 30,
+        'retries': 3,
+        'fragment_retries': 10,
+        'skip_unavailable_fragments': True,
+        'continue_dl': True,
     }
     os.makedirs(path, exist_ok=True)
     # Функция для выполнения yt-dlp
     loop = asyncio.get_event_loop()
     try:
         result = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=True))
-    except:
-        return None
+    except Exception as e:
+        print(f"Error downloading video: {e}")
+        try:
+            ydl_opts_alt = ydl_opts.copy()
+            ydl_opts_alt['format'] = 'best'
+            ydl_opts_alt['extractor_args'] = {
+                'youtube': {
+                    'player_client': ['android_embedded', 'tv_embedded'],
+                    'skip': ['dash', 'hls']
+                }
+            }
+            result = await loop.run_in_executor(
+                None, 
+                lambda: yt_dlp.YoutubeDL(ydl_opts_alt).extract_info(link, download=True)
+            )
+        except Exception as alt_e:
+            print(f"Alternative method also failed: {alt_e}")
+            return None
+        
     if result is not None:
         replacements = {
             '/': '⧸',     # Прямой слэш
@@ -136,26 +166,8 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
         video_title = result['title'].strip()
         for old, new in replacements.items():
             video_title = video_title.replace(old, new)
-        #video_title = result['title'].strip().replace('/', '⧸').replace('|', '｜').replace('?', '？').replace(':', '：').replace('"', '＂')
         video_title = re.sub(r'[\x00-\x1F\x7F]', '', video_title)
         video_filename = f"{video_title}.{result['ext']}"
-        # # Если файл не в формате mp4, конвертируем его в mp4
-        # if result['ext'] == 'webm':
-        #     output_file = os.path.join(path, f"{video_title}.mp4")
-        #     try:
-        #         downloaded_file_escaped = shlex.quote(os.path.abspath(video_filename))
-        #         output_file_escaped = shlex.quote(os.path.abspath(output_file))
-        #         print(f"Downloaded file path: {downloaded_file_escaped}")
-        #         print(f"Output file path: {output_file_escaped}")
-        #         if not os.path.exists(video_filename):
-        #             print(f"File does not exist: {path}/{video_filename}")
-        #         ffmpeg.input(downloaded_file_escaped).output(output_file_escaped).run()
-        #         os.remove(video_filename)  # Удаляем оригинальный файл, если он не в mp4
-        #         return output_file  # Возвращаем путь к mp4 файлу
-        #     except ffmpeg.Error as e:
-        #         print(f"FFmpeg error: {e}")
-        #compressed_filename = f"{video_title}-compressed.{out_format}"
-        #filename = compress_video_ffmpeg(video_filename, compressed_filename)
         return video_filename
     return None
 
@@ -294,7 +306,15 @@ def get_video_resolution_moviepy(video_path):
     clip.close()
     return width, height
 
-    
+
+def download_youtube_sync(link):
+    return asyncio.run(download_from_youtube(link))
+
+def get_audio_from_youtube_sync(link):
+    return asyncio.run(get_audio_from_youtube(link))
+
+def convert_to_audio_sync(path):
+    return asyncio.run(convert_to_audio(path))
 
 if __name__ == "__main__":
     print("Welcome to audio/video helper!")
@@ -303,17 +323,16 @@ if __name__ == "__main__":
     choise = int(input("Chose variant: "))
     if choise == 1:
         link = input("Give me the link: ")
-        download_from_youtube(link)
+        download_youtube_sync(link)
         print("Done!")
     elif choise == 2:
         path = input("Give me path to the video file: ")
-        convert_to_audio(path)
+        convert_to_audio_sync(path)
         print("Done!")
     elif choise == 3:
         link = input("Give me the link: ")
-        get_audio_from_youtube(link)
+        get_audio_from_youtube_sync(link)
         print("Done!")
-
     elif choise == 4:
         link = input("Give me the link: ")
         download_instagram_reels(link)
