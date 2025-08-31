@@ -114,7 +114,7 @@ def compress_video(input_path, output_path, target_size_mb=50):
         return False
     
 
-def get_yt_dlp_conf(proxy=False):
+def get_yt_dlp_conf(path, proxy=False):
     ydl_opts = {
         'format': 'bestvideo[vcodec~="^avc"][height<=1080]+bestaudio[acodec~="^mp4a"]/best[vcodec~="^avc"]/best',
         'outtmpl': f'{path}/%(title)s.%(ext)s',
@@ -144,7 +144,7 @@ def get_yt_dlp_conf(proxy=False):
 
 
 async def download_from_youtube(link, path='./videos/youtube', out_format="mp4", res="720p", filename=None):
-    ydl_opts = get_yt_dlp_conf()
+    ydl_opts = get_yt_dlp_conf(path)
     os.makedirs(path, exist_ok=True)
     # Функция для выполнения yt-dlp
     loop = asyncio.get_event_loop()
@@ -169,7 +169,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
             print(f"❌ Failed without proxy: {alt_e}")
             try:
                 print("🔄 Trying with proxies...")
-                ydl_opts = get_yt_dlp_conf(proxy=True)
+                ydl_opts = get_yt_dlp_conf(path, proxy=True)
                 result = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=True))
             except Exception as last_e:
                 print(f"❌ Failed even with proxy: {last_e}")
