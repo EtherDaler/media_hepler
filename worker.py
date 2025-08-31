@@ -18,6 +18,7 @@ from moviepy import VideoFileClip, AudioFileClip, concatenate_audioclips
 from pytube import YouTube
 from instascrape.scrapers import Reel
 from pprint import pprint
+from data.config import PROXYS
 
 from PIL import Image, ExifTags
 
@@ -33,6 +34,13 @@ def find(pattern, path):
 
 def generate_session():
     return base64.b64encode(os.urandom(16))
+
+
+def get_random_proxy():
+    if not PROXYS:
+        return None
+    proxy = random.choice(PROXYS)
+    return proxy
 
 
 def get_name_from_path(path: str):
@@ -104,14 +112,13 @@ def compress_video(input_path, output_path, target_size_mb=50):
     else:
         print(f"Размер видео {input_path} ({file_size_mb:.2f} МБ) меньше {target_size_mb} МБ. Сжатие не требуется.")
         return False
+    
 
-
-async def download_from_youtube(link, path='./videos/youtube', out_format="mp4", res="720p", filename=None):
+def get_yt_dlp_conf(proxy=False):
     ydl_opts = {
         'format': 'bestvideo[vcodec~="^avc"][height<=1080]+bestaudio[acodec~="^mp4a"]/best[vcodec~="^avc"]/best',
         'outtmpl': f'{path}/%(title)s.%(ext)s',
         'noplaylist': True,
-        'cookiefile': './cookies.txt',
         'verbose': True,
         'extractor_args': {
             'youtube': {
@@ -127,6 +134,17 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
         'skip_unavailable_fragments': True,
         'continue_dl': True,
     }
+    if proxy:
+        proxy_url = get_random_proxy()
+        ydl_opts['proxy'] = proxy_url
+        ydl_opts['cookiesfrombrowser'] = ('chrome',)
+    else:
+        ydl_opts['cookiefile'] = './cookies.txt'
+    return ydl_opts
+
+
+async def download_from_youtube(link, path='./videos/youtube', out_format="mp4", res="720p", filename=None):
+    ydl_opts = get_yt_dlp_conf()
     os.makedirs(path, exist_ok=True)
     # Функция для выполнения yt-dlp
     loop = asyncio.get_event_loop()
@@ -148,9 +166,15 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
                 lambda: yt_dlp.YoutubeDL(ydl_opts_alt).extract_info(link, download=True)
             )
         except Exception as alt_e:
-            print(f"Alternative method also failed: {alt_e}")
-            return None
-        
+            print(f"❌ Failed without proxy: {alt_e}")
+            try:
+                print("🔄 Trying with proxies...")
+                ydl_opts = get_yt_dlp_conf(proxy=True)
+                result = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=True))
+            except Exception as last_e:
+                print(f"❌ Failed even with proxy: {last_e}")
+                result = None
+
     if result is not None:
         replacements = {
             '/': '⧸',     # Прямой слэш
