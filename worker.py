@@ -133,13 +133,11 @@ def get_yt_dlp_conf(path, proxy=False):
         'fragment_retries': 10,
         'skip_unavailable_fragments': True,
         'continue_dl': True,
+        'cookiefile': './cookies.txt'
     }
     if proxy:
         proxy_url = get_random_proxy()
         ydl_opts['proxy'] = proxy_url
-        ydl_opts['cookiesfrombrowser'] = ('chrome',)
-    else:
-        ydl_opts['cookiefile'] = './cookies.txt'
     return ydl_opts
 
 
