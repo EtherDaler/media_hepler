@@ -17,4 +17,4 @@ ADMINS = os.environ.get("ADMINS").split()
 
 DEV_CHANEL_ID = os.environ.get("DEV_CHANEL_ID")
 
-PROXYS = os.environ.get("PROXY")
+PROXYS = os.environ.get("PROXY", "[]")

@@ -13,6 +13,7 @@ import subprocess
 import random
 import shlex
 import re
+import json
 
 from moviepy import VideoFileClip, AudioFileClip, concatenate_audioclips
 from pytube import YouTube
@@ -21,6 +22,9 @@ from pprint import pprint
 from data.config import PROXYS
 
 from PIL import Image, ExifTags
+
+
+PARSED_PROXYS = json.loads(PROXYS)
 
 
 def find(pattern, path):
@@ -37,9 +41,9 @@ def generate_session():
 
 
 def get_random_proxy():
-    if not PROXYS:
+    if not PARSED_PROXYS:
         return None
-    proxy = random.choice(PROXYS)
+    proxy = random.choice(PARSED_PROXYS)
     return proxy
 
 
