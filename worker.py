@@ -120,7 +120,7 @@ def compress_video(input_path, output_path, target_size_mb=50):
 
 def get_yt_dlp_conf(path, proxy=False):
     ydl_opts = {
-        'format': 'bestvideo[vcodec~="^avc"][height<=1080]+bestaudio[acodec~="^mp4a"]/best[vcodec~="^avc"]/best',
+        'format': 'bestaudio[ext=m4a]/best[height<=1080]',
         'outtmpl': f'{path}/%(title)s.%(ext)s',
         'noplaylist': True,
         'verbose': True,
