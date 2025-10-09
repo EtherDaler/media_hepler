@@ -120,7 +120,7 @@ def compress_video(input_path, output_path, target_size_mb=50):
 
 def get_yt_dlp_conf(path, proxy=False):
     ydl_opts = {
-        'format': 'bestvideo[vcodec~="^avc"][height<=1080]+bestaudio[acodec~="^mp4a"]/best[vcodec~="^avc"]/best',
+        'format': 'bestvideo[height<=1080]+bestaudio/best',
         'outtmpl': f'{path}/%(title)s.%(ext)s',
         'noplaylist': True,
         'verbose': True,
@@ -130,6 +130,8 @@ def get_yt_dlp_conf(path, proxy=False):
                 'skip': ['dash', 'hls']
             }
         },
+        'http_chunk_size': 0,
+        'nopart': True,
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
         'referer': 'https://www.youtube.com/',
         'socket_timeout': 30,
