@@ -14,6 +14,7 @@ import random
 import shlex
 import re
 import json
+import logging
 
 from moviepy import VideoFileClip, AudioFileClip, concatenate_audioclips
 from pytube import YouTube
@@ -22,6 +23,9 @@ from pprint import pprint
 from data.config import PROXYS
 
 from PIL import Image, ExifTags
+
+
+logger = logging.getLogger(__name__)
 
 
 PARSED_PROXYS = json.loads(PROXYS)
@@ -86,7 +90,7 @@ def compress_video_ffmpeg(input_file, output_file, max_size_mb=50, path='./video
     # Проверяем, уменьшился ли файл до нужного размера
     output_size = os.path.getsize(f"{path}/{output_file}")
     if output_size > max_size_bytes:
-        print(f"Warning: Video is still larger than {max_size_mb} MB.")
+        logger.warning(f"Warning: Video is still larger than {max_size_mb} MB.")
 
     if os.path.isfile(f"{path}/{input_file}"):
         os.remove(f"{path}/{input_file}")
@@ -100,8 +104,8 @@ def compress_video(input_path, output_path, target_size_mb=50):
     
     # Если размер больше указанного порога
     if file_size_mb > target_size_mb:
-        print(f"Видео {input_path} имеет размер {file_size_mb:.2f} МБ, что больше {target_size_mb} МБ.")
-        print("Запуск сжатия...")
+        logger.info(f"Видео {input_path} имеет размер {file_size_mb:.2f} МБ, что больше {target_size_mb} МБ.")
+        logger.info("Запуск сжатия...")
 
         # Открываем видеофайл с помощью moviepy
         video = VideoFileClip(input_path)
@@ -109,29 +113,33 @@ def compress_video(input_path, output_path, target_size_mb=50):
         # Пример сжатия, уменьшив битрейт
         video.write_videofile(output_path, bitrate="500k", codec="libx264", audio_codec="aac")
         
-        print(f"Видео сжато и сохранено как {output_path}")
+        logger.info(f"Видео сжато и сохранено как {output_path}")
         if os.path.isfile(f"{input_path}"):
             os.remove(f"{input_path}")
         return True
     else:
-        print(f"Размер видео {input_path} ({file_size_mb:.2f} МБ) меньше {target_size_mb} МБ. Сжатие не требуется.")
+        logger.info(f"Размер видео {input_path} ({file_size_mb:.2f} МБ) меньше {target_size_mb} МБ. Сжатие не требуется.")
         return False
     
 
-def get_yt_dlp_conf(path, proxy=False):
+def get_yt_dlp_conf(path, proxy_url=None, player_client='web'):
+    """
+    Возвращает ydl_opts. Если proxy_url задан — он подставляется (нормализуется).
+    """
     ydl_opts = {
         'format': 'bestvideo[height<=1080]+bestaudio/best',
         'outtmpl': f'{path}/%(title)s.%(ext)s',
         'noplaylist': True,
         'verbose': True,
+        'quiet': False,
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'web'],
+                'player_client': [player_client],
                 'skip': ['dash', 'hls']
             }
         },
-        'http_chunk_size': 0,
-        'nopart': True,
+        'http_chunk_size': 0,   # отключаем chunked/Range-запросы
+        'nopart': True,         # не использовать .part файлы
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
         'referer': 'https://www.youtube.com/',
         'socket_timeout': 30,
@@ -141,62 +149,148 @@ def get_yt_dlp_conf(path, proxy=False):
         'continue_dl': True,
         'cookiefile': '/root/media_helper/cookies.txt'
     }
-    if proxy:
-        proxy_url = get_random_proxy()
-        ydl_opts['proxy'] = proxy_url
+
+    if proxy_url:
+        p = str(proxy_url).rstrip('/') + '/'
+        ydl_opts['proxy'] = p
+        # ставим env на всякий случай, очищаем HTTP_PROXY/HTTPS_PROXY
+        os.environ['ALL_PROXY'] = p
+        os.environ.pop('HTTP_PROXY', None)
+        os.environ.pop('HTTPS_PROXY', None)
+
     return ydl_opts
 
 
 async def download_from_youtube(link, path='./videos/youtube', out_format="mp4", res="720p", filename=None):
-    ydl_opts = get_yt_dlp_conf(path)
+    """
+    Логика:
+    1) Пытаться скачать БЕЗ прокси (player_client=web).
+    2) Если неудача — пробовать другие clients (android_embedded, tv_embedded) без прокси.
+    3) Если всё ещё неудача — попытки повторяются с прокси (если get_random_proxy() даёт прокси).
+    Возвращает имя файла (строку) или None.
+    """
     os.makedirs(path, exist_ok=True)
-    # Функция для выполнения yt-dlp
     loop = asyncio.get_event_loop()
-    try:
-        result = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=True))
-    except Exception as e:
-        print(f"Error downloading video: {e}")
-        try:
-            ydl_opts_alt = ydl_opts.copy()
-            ydl_opts_alt['format'] = 'best'
-            ydl_opts_alt['extractor_args'] = {
-                'youtube': {
-                    'player_client': ['android_embedded', 'tv_embedded'],
-                    'skip': ['dash', 'hls']
-                }
-            }
-            result = await loop.run_in_executor(
-                None, 
-                lambda: yt_dlp.YoutubeDL(ydl_opts_alt).extract_info(link, download=True)
-            )
-        except Exception as alt_e:
-            print(f"❌ Failed without proxy: {alt_e}")
-            try:
-                print("🔄 Trying with proxies...")
-                ydl_opts = get_yt_dlp_conf(path, proxy=True)
-                result = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=True))
-            except Exception as last_e:
-                print(f"❌ Failed even with proxy: {last_e}")
-                result = None
 
+    # helper: попытка с указанными ydl_opts (download=False чтобы получить info, затем download=True)
+    def extract_info_sync(opts, url, download=False):
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            return ydl.extract_info(url, download=download)
+
+    # шаги без прокси
+    attempts = []
+
+    # 1) Первый базовый вариант: web client, try to choose format 18 if present
+    try:
+        logger.info("Attempt: no-proxy, client=web -> extract_info")
+        ydl_opts = get_yt_dlp_conf(path, proxy_url=None, player_client='web')
+        info = await loop.run_in_executor(None, lambda: extract_info_sync(ydl_opts, link, download=False))
+        formats = info.get('formats', [])
+        # выбрать формат: предпочтение 18 (как в CLI)
+        chosen_format = None
+        for f in formats:
+            if f.get('format_id') == '18':
+                chosen_format = '18'
+                break
+        if not chosen_format:
+            # fallback: лучший <= requested res (или best)
+            max_h = 1080
+            if isinstance(res, str) and res.endswith('p'):
+                try:
+                    max_h = int(res[:-1])
+                except Exception:
+                    pass
+            cand = [f for f in formats if (f.get('height') or 0) <= max_h and f.get('vcodec') != 'none']
+            if cand:
+                cand_sorted = sorted(cand, key=lambda x: (x.get('height') or 0, x.get('tbr') or 0), reverse=True)
+                chosen_format = cand_sorted[0].get('format_id')
+            else:
+                chosen_format = 'best'
+        logger.info("Chosen format (no-proxy):", chosen_format)
+        ydl_opts['format'] = chosen_format
+
+        logger.info("Downloading (no-proxy) with chosen format...")
+        result = await loop.run_in_executor(None, lambda: extract_info_sync(ydl_opts, link, download=True))
+    except Exception as e_no_proxy:
+        logger.error("No-proxy primary attempt failed:", repr(e_no_proxy))
+        result = None
+        # 2) Фоллбек: другие clients без прокси
+        try:
+            logger.info("Fallback: no-proxy, try clients android_embedded, tv_embedded")
+            ydl_opts_alt = get_yt_dlp_conf(path, proxy_url=None, player_client='android_embedded')
+            ydl_opts_alt['format'] = 'best'
+            result = await loop.run_in_executor(None, lambda: extract_info_sync(ydl_opts_alt, link, download=True))
+        except Exception as e_alt_no_proxy:
+            logger.error("Fallback no-proxy failed:", repr(e_alt_no_proxy))
+            result = None
+
+    # 3) Если без прокси всё не получилось -> пробуем с прокси (если есть)
+    if result is None:
+        proxy = None
+        try:
+            proxy = get_random_proxy()  # твоя функция должна вернуть строку или None
+        except Exception as e:
+            logger.error("get_random_proxy failed:", repr(e))
+            proxy = None
+
+        if proxy:
+            try:
+                logger.info("Attempt: with-proxy, client=web -> extract_info")
+                ydl_opts_p = get_yt_dlp_conf(path, proxy_url=proxy, player_client='web')
+                info_p = await loop.run_in_executor(None, lambda: extract_info_sync(ydl_opts_p, link, download=False))
+                formats_p = info_p.get('formats', [])
+                chosen_format_p = None
+                for f in formats_p:
+                    if f.get('format_id') == '18':
+                        chosen_format_p = '18'
+                        break
+                if not chosen_format_p:
+                    max_h = 1080
+                    if isinstance(res, str) and res.endswith('p'):
+                        try:
+                            max_h = int(res[:-1])
+                        except Exception:
+                            pass
+                    cand = [f for f in formats_p if (f.get('height') or 0) <= max_h and f.get('vcodec') != 'none']
+                    if cand:
+                        cand_sorted = sorted(cand, key=lambda x: (x.get('height') or 0, x.get('tbr') or 0), reverse=True)
+                        chosen_format_p = cand_sorted[0].get('format_id')
+                    else:
+                        chosen_format_p = 'best'
+                logger.info("Chosen format (proxy):", chosen_format_p)
+                ydl_opts_p['format'] = chosen_format_p
+
+                logger.info("Downloading (with-proxy) with chosen format...")
+                result = await loop.run_in_executor(None, lambda: extract_info_sync(ydl_opts_p, link, download=True))
+            except Exception as e_with_proxy:
+                logger.error("With-proxy attempt failed:", repr(e_with_proxy))
+                result = None
+            # last fallback with different client using proxy
+            if result is None:
+                try:
+                    logger.info("Fallback (with-proxy): try android_embedded client")
+                    ydl_opts_p2 = get_yt_dlp_conf(path, proxy_url=proxy, player_client='android_embedded')
+                    ydl_opts_p2['format'] = 'best'
+                    result = await loop.run_in_executor(None, lambda: extract_info_sync(ydl_opts_p2, link, download=True))
+                except Exception as e_with_proxy_alt:
+                    logger.error("With-proxy fallback failed:", repr(e_with_proxy_alt))
+                    result = None
+
+    # если успешно — формируем имя файла и возвращаем
     if result is not None:
+        video_title = result.get('title', 'video').strip()
         replacements = {
-            '/': '⧸',     # Прямой слэш
-            '\\': '⧹',    # Обратный слэш
-            '|': '｜',     # Вертикальная черта
-            '?': '？',     # Вопросительный знак
-            '*': '＊',     # Звёздочка
-            ':': '：',     # Двоеточие
-            '"': '＂',     # Двойные кавычки
-            '<': '＜',     # Меньше
-            '>': '＞',     # Больше
+            '/': '⧸', '\\': '⧹', '|': '｜', '?': '？', '*': '＊',
+            ':': '：', '"': '＂', '<': '＜', '>': '＞',
         }
-        video_title = result['title'].strip()
         for old, new in replacements.items():
             video_title = video_title.replace(old, new)
         video_title = re.sub(r'[\x00-\x1F\x7F]', '', video_title)
-        video_filename = f"{video_title}.{result['ext']}"
+        ext = result.get('ext', out_format)
+        video_filename = f"{video_title}.{ext}"
         return video_filename
+
+    # все попытки провалены
     return None
 
 
