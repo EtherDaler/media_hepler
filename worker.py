@@ -137,7 +137,7 @@ def get_yt_dlp_conf(path, proxy=False):
         'fragment_retries': 10,
         'skip_unavailable_fragments': True,
         'continue_dl': True,
-        'cookiefile': './cookies.txt'
+        'cookiefile': '/root/media_helper/cookies.txt'
     }
     if proxy:
         proxy_url = get_random_proxy()
