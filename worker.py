@@ -1,28 +1,20 @@
 import asyncio
 import os
-import time
-import requests
 import os
 import base64
 import yt_dlp
-import exifread
 import subprocess
 import fnmatch
-import ffmpeg
 import subprocess
 import random
-import shlex
 import re
 import json
 import logging
 
+from datetime import datetime
+from typing import Optional, Dict, Any
 from moviepy import VideoFileClip, AudioFileClip, concatenate_audioclips
-from pytube import YouTube
-from instascrape.scrapers import Reel
-from pprint import pprint
 from data.config import PROXYS
-
-from PIL import Image, ExifTags
 
 
 logger = logging.getLogger(__name__)
@@ -429,6 +421,80 @@ def get_video_resolution_moviepy(video_path):
     return width, height
 
 
+class TikTokDownloader:
+    def __init__(self, save_path: str = 'tiktok_videos'):
+        self.save_path = save_path
+        self.create_save_directory()
+
+    def create_save_directory(self) -> None:
+        if not os.path.exists(self.save_path):
+            os.makedirs(self.save_path)
+
+    @staticmethod
+    def validate_url(url: str) -> bool:
+        tiktok_pattern = r'https?://((?:vm|vt|www)\.)?tiktok\.com/.*'
+        return bool(re.match(tiktok_pattern, url))
+
+    @staticmethod
+    def progress_hook(d: Dict[str, Any]) -> None:
+        if d['status'] == 'downloading':
+            progress = d.get('_percent_str', 'N/A')
+            speed = d.get('_speed_str', 'N/A')
+            eta = d.get('_eta_str', 'N/A')
+            logger.info(f"Downloading: {progress} at {speed} ETA: {eta}", end='\r')
+        elif d['status'] == 'finished':
+            logger.info("\nDownload completed, finalizing...")
+
+    def get_filename(self, video_url: str, custom_name: Optional[str] = None) -> str:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if custom_name:
+            return f"{custom_name}_{timestamp}.mp4"
+        return f"tiktok_{timestamp}.mp4"
+
+    def list_formats(self, video_url: str) -> None:
+        """Debug helper: покажет доступные форматы для видео (позволит увидеть, есть ли аудио)."""
+        ydl_opts = {'nocheckcertificate': True, 'listformats': True, 'quiet': False}
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(video_url, download=False)
+
+    def download_video(self, video_url: str, custom_name: Optional[str] = None) -> Optional[str]:
+        if not self.validate_url(video_url):
+            logger.error("Error: Invalid TikTok URL")
+            return None
+
+        filename = self.get_filename(video_url, custom_name)
+        output_path = os.path.join(self.save_path, filename)
+
+        ydl_opts = {
+            'outtmpl': output_path,
+            # скачиваем лучший видеопоток + лучший аудиопоток, иначе возьмёт комбинированный best
+            'format': 'bestvideo+bestaudio/best',
+            'noplaylist': True,
+            'quiet': False,
+            'progress_hooks': [self.progress_hook],
+            'cookiefile': '/root/media_helper/tiktok_cookie.txt',
+            # чтобы явно слить в mp4 (если нужно)
+            'merge_output_format': 'mp4',
+            # если веб-версия даёт только демо (без звука), убрать webpage_download
+            # 'extractor_args': {'tiktok': {'webpage_download': False}},
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+            }
+        }
+
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([video_url])
+                logger.info(f"\nVideo successfully downloaded: {output_path}")
+                return filename
+        except yt_dlp.utils.DownloadError as e:
+            logger.error(f"Error downloading video: {str(e)}")
+        except Exception as e:
+            logger.error(f"An unexpected error occurred: {str(e)}")
+
+        return None
+
+
 def download_youtube_sync(link):
     return asyncio.run(download_from_youtube(link))
 
@@ -441,7 +507,7 @@ def convert_to_audio_sync(path):
 if __name__ == "__main__":
     print("Welcome to audio/video helper!")
     print("To download youtube video input 1\nTo extract audio from video input 2\nTo download audio from youtube "
-          "input 3\nTo download reels from instagram input 4\nTo change audio on video 5\n")
+          "input 3\nTo download reels from instagram input 4\nTo change audio on video input 5\nTo download TikTok input 6 \n")
     choise = int(input("Chose variant: "))
     if choise == 1:
         link = input("Give me the link: ")
@@ -462,5 +528,11 @@ if __name__ == "__main__":
     elif choise == 5:
         replace_audio("подъем коленей высоко.mov", "Lou Reed - Perfect Day (Official Audio).mp3")
         print("Done!")
+    elif choise == 6:
+        link = input("Give me the link: ")
+        downloader = TikTokDownloader(save_path='videos/tiktok')
+        res = downloader.download_video(link)
+        print(res)
+        #downloader.list_formats(link)
     else:
         print("I don`t know what u wanna do!")

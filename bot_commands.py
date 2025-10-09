@@ -179,6 +179,21 @@ async def command_pinterest_video(message: Message, state: FSMContext, session: 
         await message.answer("Отправь мне ссылку на видео")
         await state.set_state(YoutubeState.link)
 
+@router.message(Command("tiktok"))
+async def command_tiktok_video(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    status = True
+    user = await db_commands.get_item(User, 'tg_id', message.from_user.id, message, session)
+    if user is None:
+        status = await db_commands.db_register_user(message, session)
+        if status:
+            user = await db_commands.get_item(User, 'tg_id', message.from_user.id, message, session)
+        else:
+            await message.answer("Произошла ошибка, повторите попытку позже!")
+    if status:
+        await state.update_data(command_type="tiktok")
+        await message.answer("Отправь мне ссылку на видео")
+        await state.set_state(YoutubeState.link)
+
 @router.message(Command("convert_to_audio"))
 async def command_convert_to_audio(message: Message, state: FSMContext, session: AsyncSession) -> None:
     status = True
@@ -370,6 +385,29 @@ async def get_link(message: Message, state: FSMContext) -> None:
             await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #Pinterest")
             if os.path.isfile(f"./videos/pinterest/{filename}.mp4"):
                 os.remove(f"./videos/pinterest/{filename}.mp4")
+
+    elif state_info["command_type"] == 'tiktok':
+        await message.answer("Подождите загружаем видео...")
+        await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)
+        tiktok_downloader = worker.TikTokDownloader("./videos/tiktok")
+        try:
+            filename = tiktok_downloader.download_video(link)
+        except Exception as e:
+            logger.error(e)
+            filename = None
+        if filename:
+            doc = await message.answer_document(document=FSInputFile(f"./videos/tiktok/{filename}.mp4"),
+                                                caption="Ваш tiktok готов!\n@django_media_helper_bot")
+            await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #tiktok")
+            if doc:
+                if os.path.isfile(f"./videos/tiktok/{filename}.mp4"):
+                    os.remove(f"./videos/tiktok/{filename}.mp4")
+        else:
+            await message.answer("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
+            await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #tiktok")
+            if os.path.isfile(f"./videos/tiktok/{filename}.mp4"):
+                os.remove(f"./videos/tiktok/{filename}.mp4")
+
     await state.clear()
 
 @router.message(VideoState.video)
