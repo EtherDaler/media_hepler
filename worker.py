@@ -20,7 +20,6 @@ from pytube import YouTube
 from instascrape.scrapers import Reel
 from pprint import pprint
 from data.config import PROXYS
-from yt_dlp.utils import ExtractorError
 
 from PIL import Image, ExifTags
 
@@ -121,7 +120,7 @@ def compress_video(input_path, output_path, target_size_mb=50):
 
 def get_yt_dlp_conf(path, proxy=False):
     ydl_opts = {
-        #'format': 'bestaudio[ext=m4a]/best[height<=1080]',
+        'format': 'bestvideo[vcodec~="^avc"][height<=1080]+bestaudio[acodec~="^mp4a"]/best[vcodec~="^avc"]/best',
         'outtmpl': f'{path}/%(title)s.%(ext)s',
         'noplaylist': True,
         'verbose': True,
@@ -138,8 +137,7 @@ def get_yt_dlp_conf(path, proxy=False):
         'fragment_retries': 10,
         'skip_unavailable_fragments': True,
         'continue_dl': True,
-        'cookiefile': '/root/media_helper/cookies.txt',
-        'merge_output_format': 'mp4'
+        'cookiefile': '/root/media_helper/cookies.txt'
     }
     if proxy:
         proxy_url = get_random_proxy()
@@ -149,28 +147,11 @@ def get_yt_dlp_conf(path, proxy=False):
 
 async def download_from_youtube(link, path='./videos/youtube', out_format="mp4", res="720p", filename=None):
     ydl_opts = get_yt_dlp_conf(path)
-    formats_to_try = [
-        'bestaudio[ext=m4a]/best[height<=1080]',
-        'bestvideo[height<=1080]+bestaudio/best',
-        'best[height<=1080]',
-        'best'
-    ]
     os.makedirs(path, exist_ok=True)
     # Функция для выполнения yt-dlp
     loop = asyncio.get_event_loop()
     try:
-        #result = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=True))
-        for fmt in formats_to_try:
-            print(f"\nTrying format: {fmt}")
-            opts = dict(ydl_opts)
-            opts['format'] = fmt
-            try:
-                result = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=True))
-                print("Downloaded with format:", fmt)
-                break
-            except ExtractorError as e:
-                print(f"Format {fmt} failed: {e}")
-                continue
+        result = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=True))
     except Exception as e:
         print(f"Error downloading video: {e}")
         try:
@@ -182,35 +163,16 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
                     'skip': ['dash', 'hls']
                 }
             }
-            #result = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts_alt).extract_info(link, download=True))
-            for fmt in formats_to_try:
-                print(f"\nTrying format: {fmt}")
-                opts = dict(ydl_opts)
-                opts['format'] = fmt
-                try:
-                    result = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=True))
-                    print("Downloaded with format:", fmt)
-                    break
-                except ExtractorError as e:
-                    print(f"Format {fmt} failed: {e}")
-                    continue
+            result = await loop.run_in_executor(
+                None, 
+                lambda: yt_dlp.YoutubeDL(ydl_opts_alt).extract_info(link, download=True)
+            )
         except Exception as alt_e:
             print(f"❌ Failed without proxy: {alt_e}")
             try:
                 print("🔄 Trying with proxies...")
                 ydl_opts = get_yt_dlp_conf(path, proxy=True)
-                #result = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=True))
-                for fmt in formats_to_try:
-                    print(f"\nTrying format: {fmt}")
-                    opts = dict(ydl_opts)
-                    opts['format'] = fmt
-                    try:
-                        result = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=True))
-                        print("Downloaded with format:", fmt)
-                        break
-                    except ExtractorError as e:
-                        print(f"Format {fmt} failed: {e}")
-                        continue
+                result = await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).extract_info(link, download=True))
             except Exception as last_e:
                 print(f"❌ Failed even with proxy: {last_e}")
                 result = None
