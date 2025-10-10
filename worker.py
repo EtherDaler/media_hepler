@@ -471,7 +471,8 @@ class TikTokDownloader:
             'format': 'bestvideo+bestaudio/best',
             'noplaylist': True,
             'quiet': False,
-            'progress_hooks': [self.progress_hook],
+            'verbose': True,
+            #'progress_hooks': [self.progress_hook],
             'cookiefile': '/root/media_helper/tiktok_cookie.txt',
             # чтобы явно слить в mp4 (если нужно)
             'merge_output_format': 'mp4',
