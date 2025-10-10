@@ -397,21 +397,21 @@ async def get_link(message: Message, state: FSMContext) -> None:
             filename = None
         if filename:
             try:
-                doc = await message.answer_document(document=FSInputFile(f"./videos/tiktok/{filename}.mp4"),
+                doc = await message.answer_document(document=FSInputFile(f"./videos/tiktok/{filename}"),
                                                     caption="Ваш tiktok готов!\n@django_media_helper_bot")
                 await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #tiktok")
                 if doc:
-                    if os.path.isfile(f"./videos/tiktok/{filename}.mp4"):
-                        os.remove(f"./videos/tiktok/{filename}.mp4")
+                    if os.path.isfile(f"./videos/tiktok/{filename}"):
+                        os.remove(f"./videos/tiktok/{filename}")
             except Exception as e:
                 logger.error(e)
-                if os.path.isfile(f"./videos/tiktok/{filename}.mp4"):
-                    os.remove(f"./videos/tiktok/{filename}.mp4")
+                if os.path.isfile(f"./videos/tiktok/{filename}"):
+                    os.remove(f"./videos/tiktok/{filename}")
         else:
             await message.answer("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
             await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #tiktok")
-            if os.path.isfile(f"./videos/tiktok/{filename}.mp4"):
-                os.remove(f"./videos/tiktok/{filename}.mp4")
+            if os.path.isfile(f"./videos/tiktok/{filename}"):
+                os.remove(f"./videos/tiktok/{filename}")
 
     await state.clear()
 
