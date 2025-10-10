@@ -486,7 +486,7 @@ class TikTokDownloader:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([video_url])
                 logger.info(f"\nVideo successfully downloaded: {output_path}")
-                return filename
+            return filename
         except yt_dlp.utils.DownloadError as e:
             logger.error(f"Error downloading video: {str(e)}")
         except Exception as e:

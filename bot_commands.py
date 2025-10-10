@@ -396,10 +396,15 @@ async def get_link(message: Message, state: FSMContext) -> None:
             logger.error(e)
             filename = None
         if filename:
-            doc = await message.answer_document(document=FSInputFile(f"./videos/tiktok/{filename}.mp4"),
-                                                caption="Ваш tiktok готов!\n@django_media_helper_bot")
-            await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #tiktok")
-            if doc:
+            try:
+                doc = await message.answer_document(document=FSInputFile(f"./videos/tiktok/{filename}.mp4"),
+                                                    caption="Ваш tiktok готов!\n@django_media_helper_bot")
+                await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #tiktok")
+                if doc:
+                    if os.path.isfile(f"./videos/tiktok/{filename}.mp4"):
+                        os.remove(f"./videos/tiktok/{filename}.mp4")
+            except Exception as e:
+                logger.error(e)
                 if os.path.isfile(f"./videos/tiktok/{filename}.mp4"):
                     os.remove(f"./videos/tiktok/{filename}.mp4")
         else:
