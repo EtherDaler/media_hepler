@@ -14,6 +14,7 @@ import logging
 from datetime import datetime
 from typing import Optional, Dict, Any
 from moviepy import VideoFileClip, AudioFileClip, concatenate_audioclips
+from youtube_search import YoutubeSearch
 from data.config import PROXYS
 
 
@@ -147,6 +148,12 @@ def get_yt_dlp_conf(path, proxy_url=None, player_client='web'):
         ydl_opts['proxy'] = p
         # ставим env на всякий случай, очищаем HTTP_PROXY/HTTPS_PROXY
         os.environ['ALL_PROXY'] = p
+        os.environ.pop('HTTP_PROXY', None)
+        os.environ.pop('HTTPS_PROXY', None)
+
+    else:
+        # гарантия, что при вызове без прокси окружение не использует старый прокси
+        os.environ.pop('ALL_PROXY', None)
         os.environ.pop('HTTP_PROXY', None)
         os.environ.pop('HTTPS_PROXY', None)
 
@@ -284,6 +291,16 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
 
     # все попытки провалены
     return None
+
+
+def search_videos(query, max_results=5):
+    """Поиск видео по запросу"""
+    try:
+        results = YoutubeSearch(query, max_results=max_results).to_dict()
+        return results
+    except Exception as e:
+        logging.error(f"Ошибка поиска: {e}")
+        return []
 
 
 async def convert_to_audio(video, path='./audio/converted', out_format="mp3", filename=None):
@@ -508,7 +525,8 @@ def convert_to_audio_sync(path):
 if __name__ == "__main__":
     print("Welcome to audio/video helper!")
     print("To download youtube video input 1\nTo extract audio from video input 2\nTo download audio from youtube "
-          "input 3\nTo download reels from instagram input 4\nTo change audio on video input 5\nTo download TikTok input 6 \n")
+          "input 3\nTo download reels from instagram input 4\nTo change audio on video input 5\nTo download TikTok input 6 \n"
+          "To find yotube video input 7 \n")
     choise = int(input("Chose variant: "))
     if choise == 1:
         link = input("Give me the link: ")
@@ -535,5 +553,10 @@ if __name__ == "__main__":
         res = downloader.download_video(link)
         print(res)
         #downloader.list_formats(link)
+    elif choise == 7:
+        text = input("Gimme what u want to find: ")
+        res = search_videos(text)
+        for item in res:
+            print(f"{item['title']}\n - https://www.youtube.com/watch?v={item['id']}\n")
     else:
         print("I don`t know what u wanna do!")
