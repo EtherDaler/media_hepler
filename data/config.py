@@ -19,3 +19,4 @@ DEV_CHANEL_ID = os.environ.get("DEV_CHANEL_ID")
 
 PROXYS = os.environ.get("PROXY", "[]")
 SIMPLE_PROXY = os.environ.get("SIMPLE_PROXY")
+DEFAULT_YT_COOKIE = os.environ.get("DEFAULT_YT_COOKIE")

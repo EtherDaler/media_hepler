@@ -15,7 +15,7 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 from moviepy import VideoFileClip, AudioFileClip, concatenate_audioclips
 from youtube_search import YoutubeSearch
-from data.config import PROXYS
+from data.config import PROXYS, DEFAULT_YT_COOKIE
 
 
 logger = logging.getLogger(__name__)
@@ -115,7 +115,7 @@ def compress_video(input_path, output_path, target_size_mb=50):
         return False
     
 
-def get_yt_dlp_conf(path, proxy_url=None, player_client='web'):
+def get_yt_dlp_conf(path, proxy=None, player_client='web'):
     """
     Возвращает ydl_opts. Если proxy_url задан — он подставляется (нормализуется).
     """
@@ -140,12 +140,15 @@ def get_yt_dlp_conf(path, proxy_url=None, player_client='web'):
         'fragment_retries': 10,
         'skip_unavailable_fragments': True,
         'continue_dl': True,
-        'cookiefile': '/root/media_helper/cookies.txt'
+        'cookiefile': DEFAULT_YT_COOKIE
     }
 
-    if proxy_url:
+    if proxy:
+        proxy_url = list(proxy.keys())[0]
+        proxy_cookie = proxy[proxy_url]
         p = str(proxy_url).rstrip('/') + '/'
         ydl_opts['proxy'] = p
+        ydl_opts['cookiefile'] = proxy_cookie
         # ставим env на всякий случай, очищаем HTTP_PROXY/HTTPS_PROXY
         os.environ['ALL_PROXY'] = p
         os.environ.pop('HTTP_PROXY', None)
@@ -182,7 +185,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     # 1) Первый базовый вариант: web client, try to choose format 18 if present
     try:
         logger.info("Attempt: no-proxy, client=web -> extract_info")
-        ydl_opts = get_yt_dlp_conf(path, proxy_url=None, player_client='web')
+        ydl_opts = get_yt_dlp_conf(path, proxy=None, player_client='web')
         info = await loop.run_in_executor(None, lambda: extract_info_sync(ydl_opts, link, download=False))
         formats = info.get('formats', [])
         # выбрать формат: предпочтение 18 (как в CLI)
@@ -216,7 +219,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
         # 2) Фоллбек: другие clients без прокси
         try:
             logger.info("Fallback: no-proxy, try clients android_embedded, tv_embedded")
-            ydl_opts_alt = get_yt_dlp_conf(path, proxy_url=None, player_client='android_embedded')
+            ydl_opts_alt = get_yt_dlp_conf(path, proxy=None, player_client='android_embedded')
             ydl_opts_alt['format'] = 'best'
             result = await loop.run_in_executor(None, lambda: extract_info_sync(ydl_opts_alt, link, download=True))
         except Exception as e_alt_no_proxy:
@@ -235,7 +238,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
         if proxy:
             try:
                 logger.info("Attempt: with-proxy, client=web -> extract_info")
-                ydl_opts_p = get_yt_dlp_conf(path, proxy_url=proxy, player_client='web')
+                ydl_opts_p = get_yt_dlp_conf(path, proxy=proxy, player_client='web')
                 info_p = await loop.run_in_executor(None, lambda: extract_info_sync(ydl_opts_p, link, download=False))
                 formats_p = info_p.get('formats', [])
                 chosen_format_p = None
@@ -268,7 +271,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
             if result is None:
                 try:
                     logger.info("Fallback (with-proxy): try android_embedded client")
-                    ydl_opts_p2 = get_yt_dlp_conf(path, proxy_url=proxy, player_client='android_embedded')
+                    ydl_opts_p2 = get_yt_dlp_conf(path, proxy=proxy, player_client='android_embedded')
                     ydl_opts_p2['format'] = 'best'
                     result = await loop.run_in_executor(None, lambda: extract_info_sync(ydl_opts_p2, link, download=True))
                 except Exception as e_with_proxy_alt:
