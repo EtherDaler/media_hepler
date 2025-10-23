@@ -1,3 +1,4 @@
+import asyncio
 import os
 import worker
 import metadata
@@ -7,10 +8,10 @@ import requests
 
 from aiogram import Router, F, Bot
 from aiogram.filters import Command, CommandStart
-from aiogram.types import Message, FSInputFile, ContentType, ReplyKeyboardRemove, InputFile, FSInputFile, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import Message, FSInputFile, ContentType, FSInputFile, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.exceptions import TelegramEntityTooLarge, TelegramForbiddenError
+from aiogram.exceptions import TelegramEntityTooLarge, TelegramForbiddenError, TelegramBadRequest
 from aiogram.enums.chat_action import ChatAction
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -99,7 +100,6 @@ class AnswerState(StatesGroup):
     message = State()
 
 class YoutubeSearchState(StatesGroup):
-    search = State()
     select_action = State()
     select_format = State()
 
@@ -780,9 +780,44 @@ async def handle_back_to_list(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+async def _download_and_send_audio(bot: Bot, chat_id, video_id, title, username, user_id, search_query):
+    link = f"https://www.youtube.com/watch?v={video_id}"
+    try:
+        # опционально: отправим сообщение о факте запуска фоновой задачи
+        await bot.send_message(chat_id, f"Начинаю фоновую загрузку аудио для: {title}\nЯ пришлю файл, когда всё будет готово.")
+        # heavy work in thread
+        filename = await asyncio.to_thread(worker.get_audio_from_youtube, link)
+        if filename:
+            try:
+                await bot.send_chat_action(chat_id, ChatAction.UPLOAD_VOICE)
+                await bot.send_document(chat_id, FSInputFile(f"./audio/youtube/{filename}"), caption="Ваше аудио готово!")
+                await bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {search_query} и успешно скачал аудио из #YouTube")
+            except TelegramEntityTooLarge:
+                await bot.send_message(chat_id, "Извините, размер файла слишком большой для отправки по Telegram.")
+                await bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {search_query}, но не смог скачать аудио из #YouTube, размер файла слишком большой")
+            finally:
+                try:
+                    os.remove(f"./audio/youtube/{filename}")
+                except Exception:
+                    pass
+        else:
+            await bot.send_message(chat_id, "Не удалось скачать аудио.")
+    except Exception as e:
+        logger.exception("Ошибка в фоновой задаче: %s", e)
+        await bot.send_message(chat_id, "Произошла ошибка при обработке вашего запроса.")
+        await bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {search_query}, но не смог скачать аудио из #YouTube")
+
+
 @router.callback_query(F.data == "download_audio", YoutubeSearchState.select_action)
 async def handle_download_audio(callback: CallbackQuery, state: FSMContext):
     """Обработка загрузки аудио"""
+    try:
+        await callback.answer()
+    except TelegramBadRequest as e:
+        logger.warning("Can't answer callback_query (may be expired): %s", e)
+    except Exception as e:
+        logger.exception("Unexpected error while answering callback_query: %s", e)
+
     data = await state.get_data()
     selected_video = data.get('selected_video')
 
@@ -825,8 +860,6 @@ async def handle_download_audio(callback: CallbackQuery, state: FSMContext):
         await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')}, но не смог скачать аудио из #YouTube")
     
     await state.clear()
-    await state.set_state(YoutubeSearchState.search)
-    await callback.answer()
 
 
 @router.callback_query(F.data == "download_video", YoutubeSearchState.select_action)
@@ -882,6 +915,13 @@ async def handle_download_video(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("format_"), YoutubeSearchState.select_format)
 async def handle_format_selection(callback: CallbackQuery, state: FSMContext):
     """Обработка выбора формата видео"""
+    try:
+        await callback.answer()
+    except TelegramBadRequest as e:
+        logger.warning("Can't answer callback_query (may be expired): %s", e)
+    except Exception as e:
+        logger.exception("Unexpected error while answering callback_query: %s", e)
+
     format_id = callback.data.split("_")[1]
 
     user_id = callback.from_user.id
@@ -943,8 +983,6 @@ async def handle_format_selection(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_text("✅ Видео успешно загружено!")
     
     await state.clear()
-    await state.set_state(YoutubeSearchState.search)
-    await callback.answer()
 
 
 @router.callback_query(F.data == "back_to_actions", YoutubeSearchState.select_format)
@@ -992,5 +1030,4 @@ async def cancel_handler(message: Message, state: FSMContext):
 async def reset_handler(message: Message, state: FSMContext):
     """Полный сброс состояния"""
     await state.clear()
-    await state.set_state(YoutubeSearchState.search)
     await message.answer("✅ Состояние сброшено. Начните новый поиск.")
