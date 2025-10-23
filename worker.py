@@ -563,6 +563,9 @@ def format_duration(seconds: int) -> str:
 
 
 def get_youtube_video_info(url):
+    os.environ.pop('ALL_PROXY', None)
+    os.environ.pop('HTTP_PROXY', None)
+    os.environ.pop('HTTPS_PROXY', None)
     ydl_opts = {
         'quiet': True, 
         'no_warnings': True,
@@ -570,16 +573,29 @@ def get_youtube_video_info(url):
     }
     video_id = extract_video_id(url)
     video_info = None
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-        video_info = {
-            'id': video_id,
-            'title': info.get('title', 'Неизвестно'),
-            'channel': info.get('uploader', 'Неизвестно'),
-            'duration': format_duration(info.get('duration', 0)),
-            'views': 'N/A'
-        }
-
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            video_info = {
+                'id': video_id,
+                'title': info.get('title', 'Неизвестно'),
+                'channel': info.get('uploader', 'Неизвестно'),
+                'duration': format_duration(info.get('duration', 0)),
+                'views': 'N/A'
+            }
+    except Exception as e:
+        logger.error(f"Got Error while get_youtube_video_info: {e}. \nTry with Proxy...")
+        proxy = get_random_proxy()
+        proxy_url = list(proxy.keys())[0]
+        proxy_cookie = proxy[proxy_url]
+        p = str(proxy_url).rstrip('/')
+        ydl_opts['proxy'] = p
+        ydl_opts['cookiefile'] = proxy_cookie
+        ydl_opts['socket_timeout'] = 150
+        # ставим env на всякий случай, очищаем HTTP_PROXY/HTTPS_PROXY
+        os.environ['ALL_PROXY'] = p
+        os.environ.pop('HTTP_PROXY', None)
+        os.environ.pop('HTTPS_PROXY', None)
     return video_info
 
 
