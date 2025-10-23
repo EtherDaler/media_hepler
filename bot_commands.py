@@ -804,7 +804,6 @@ async def handle_download_audio(callback: CallbackQuery, state: FSMContext):
     )
     
     # Загружаем аудио
-    filename, title = worker.download_audio(video_id)
     link = f"https://www.youtube.com/watch?v={video_id}"
     await callback.bot.send_chat_action(callback.chat.id, ChatAction.UPLOAD_VOICE)
     try:
