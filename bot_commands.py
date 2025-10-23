@@ -610,7 +610,7 @@ async def process_answer(message: Message, state: FSMContext) -> None:
     await state.clear()
 
 
-@router.message(F.text, YoutubeSearchState.search)
+@router.message(F.text)
 async def handle_search_query(message: Message, state: FSMContext):
     """Обработка поискового запроса"""
 
