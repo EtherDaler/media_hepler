@@ -15,6 +15,8 @@ from datetime import datetime
 from typing import Optional, Dict, Any, List
 from moviepy import VideoFileClip, AudioFileClip, concatenate_audioclips
 from youtube_search import YoutubeSearch
+from yt_dlp.networking.exceptions import SSLError
+
 from data.config import PROXYS, DEFAULT_YT_COOKIE
 
 
@@ -146,7 +148,7 @@ def get_yt_dlp_conf(path, proxy=None, player_client=["web"], player_js_version='
     if proxy:
         proxy_url = list(proxy.keys())[0]
         proxy_cookie = proxy[proxy_url]
-        p = str(proxy_url).rstrip('/') + '/'
+        p = str(proxy_url).rstrip('/')
         ydl_opts['proxy'] = p
         ydl_opts['cookiefile'] = proxy_cookie
         # ставим env на всякий случай, очищаем HTTP_PROXY/HTTPS_PROXY
@@ -168,20 +170,18 @@ def extract_info_sync(opts, url, download=False):
         return ydl.extract_info(url, download=download)
 
 
-async def get_format_for_youtube(ydl_opts, link, format):
-    loop = asyncio.get_event_loop()
-    
-    if format == "best":
+async def get_format_for_youtube(ydl_opts, link, format_id='best', res='720p'):
+    loop = asyncio.get_running_loop()
+    if format_id == "best":
         info = await loop.run_in_executor(None, lambda: extract_info_sync(ydl_opts, link, download=False))
         formats = info.get('formats', [])
-        # выбрать формат: предпочтение 18 (как в CLI)
         chosen_format = None
+        # предпочтение за id '18'
         for f in formats:
             if f.get('format_id') == '18':
                 chosen_format = '18'
                 break
         if not chosen_format:
-            # fallback: лучший <= requested res (или best)
             max_h = 1080
             if isinstance(res, str) and res.endswith('p'):
                 try:
@@ -190,16 +190,13 @@ async def get_format_for_youtube(ydl_opts, link, format):
                     pass
             cand = [f for f in formats if (f.get('height') or 0) <= max_h and f.get('vcodec') != 'none']
             if cand:
-                cand_sorted = sorted(cand, key=lambda x: (x.get('height') or 0, x.get('tbr') or 0), reverse=True)
+                cand_sorted = sorted(cand, key=lambda x: ((x.get('height') or 0), (x.get('tbr') or 0)), reverse=True)
                 chosen_format = cand_sorted[0].get('format_id')
             else:
                 chosen_format = 'best'
     else:
-        chosen_format = format
-    
+        chosen_format = format_id
     return chosen_format
-    
-
 
 
 async def download_from_youtube(link, path='./videos/youtube', out_format="mp4", res="720p", format="best", filename=None):
@@ -211,65 +208,77 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     Возвращает имя файла (строку) или None.
     """
     os.makedirs(path, exist_ok=True)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
-    # шаги без прокси
-    attempts = []
+    result = None
 
-    # 1) Первый базовый вариант: web client, try to choose format 18 if present
+    async def try_strategy(ydl_opts, tries=3):
+        backoff = 1.0
+        for i in range(1, tries + 1):
+            try:
+                logger.info("Download attempt %d for client=%s proxy=%s format=%s", i, ydl_opts.get('extractor_args', {}).get('youtube', {}).get('player_client'), ydl_opts.get('proxy'), ydl_opts.get('format'))
+                res_local = await loop.run_in_executor(None, lambda: extract_info_sync(ydl_opts, link, download=True))
+                return res_local
+            except SSLError as e:
+                logger.warning("SSLError attempt %d: %s", i, e)
+            except Exception as e:
+                logger.warning("Download attempt %d failed: %s", i, e)
+            if i < tries:
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, 30)
+        return None
+
+    # 1) no-proxy, web-like
     try:
-        logger.info("Attempt: no-proxy, client=web -> extract_info")
         ydl_opts = get_yt_dlp_conf(path, proxy=None, player_client=['default', 'web_safari'])
-        chosen_format = await get_format_for_youtube(ydl_opts, link, format)
-        logger.info("Chosen format (no-proxy):", chosen_format)
+        chosen_format = await get_format_for_youtube(ydl_opts, link, format, res)
         ydl_opts['format'] = chosen_format
-
-        logger.info("Downloading (no-proxy) with chosen format...")
-        result = await loop.run_in_executor(None, lambda: extract_info_sync(ydl_opts, link, download=True))
-    except Exception as e_no_proxy:
-        logger.error("No-proxy primary attempt failed:", repr(e_no_proxy))
+        logger.info("Chosen format (no-proxy): %s", chosen_format)
+        result = await try_strategy(ydl_opts, tries=3)
+    except Exception as e:
+        logger.exception("Unexpected error in primary no-proxy flow: %s", e)
         result = None
-        # 2) Фоллбек: другие clients без прокси
+
+    # fallback no-proxy alt client
+    if result is None:
         try:
-            logger.info("Fallback: no-proxy, try clients android_embedded, tv_embedded")
             ydl_opts_alt = get_yt_dlp_conf(path, proxy=None, player_client=['android_embedded'])
             ydl_opts_alt['format'] = 'best'
-            result = await loop.run_in_executor(None, lambda: extract_info_sync(ydl_opts_alt, link, download=True))
-        except Exception as e_alt_no_proxy:
-            logger.error("Fallback no-proxy failed:", repr(e_alt_no_proxy))
+            result = await try_strategy(ydl_opts_alt, tries=2)
+        except Exception as e:
+            logger.exception("Unexpected error in no-proxy fallback: %s", e)
             result = None
 
-    # 3) Если без прокси всё не получилось -> пробуем с прокси (если есть)
+    # 2) try with proxy(s)
     if result is None:
+        # get_random_proxy может возвращать dict или строку; поддерживаем оба варианта
         proxy = None
         try:
-            proxy = get_random_proxy()  # твоя функция должна вернуть строку или None
+            proxy = get_random_proxy()
         except Exception as e:
-            logger.error("get_random_proxy failed:", repr(e))
+            logger.exception("get_random_proxy failed: %s", e)
             proxy = None
 
         if proxy:
+            # primary proxy attempt
             try:
-                logger.info("Attempt: with-proxy, client=web -> extract_info")
                 ydl_opts_p = get_yt_dlp_conf(path, proxy=proxy, player_client=['default', 'web_safari'])
-                chosen_format_p = await get_format_for_youtube(ydl_opts_p, link, format)
-                logger.info("Chosen format (proxy):", chosen_format_p)
+                chosen_format_p = await get_format_for_youtube(ydl_opts_p, link, format, res)
                 ydl_opts_p['format'] = chosen_format_p
-
-                logger.info("Downloading (with-proxy) with chosen format...")
-                result = await loop.run_in_executor(None, lambda: extract_info_sync(ydl_opts_p, link, download=True))
-            except Exception as e_with_proxy:
-                logger.error("With-proxy attempt failed:", repr(e_with_proxy))
+                logger.info("Chosen format (proxy): %s", chosen_format_p)
+                result = await try_strategy(ydl_opts_p, tries=3)
+            except Exception as e:
+                logger.exception("Unexpected error preparing proxy attempt: %s", e)
                 result = None
-            # last fallback with different client using proxy
+
+            # fallback proxy client
             if result is None:
                 try:
-                    logger.info("Fallback (with-proxy): try android_embedded client")
                     ydl_opts_p2 = get_yt_dlp_conf(path, proxy=proxy, player_client=['android_embedded'])
                     ydl_opts_p2['format'] = 'best'
-                    result = await loop.run_in_executor(None, lambda: extract_info_sync(ydl_opts_p2, link, download=True))
-                except Exception as e_with_proxy_alt:
-                    logger.error(f"With-proxy fallback failed: {repr(e_with_proxy_alt)}")
+                    result = await try_strategy(ydl_opts_p2, tries=2)
+                except Exception as e:
+                    logger.exception("Unexpected error in proxy fallback: %s", e)
                     result = None
 
     # если успешно — формируем имя файла и возвращаем
