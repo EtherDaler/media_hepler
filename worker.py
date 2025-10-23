@@ -151,6 +151,7 @@ def get_yt_dlp_conf(path, proxy=None, player_client=["web"], player_js_version='
         p = str(proxy_url).rstrip('/')
         ydl_opts['proxy'] = p
         ydl_opts['cookiefile'] = proxy_cookie
+        ydl_opts['socket_timeout'] = 150
         # ставим env на всякий случай, очищаем HTTP_PROXY/HTTPS_PROXY
         os.environ['ALL_PROXY'] = p
         os.environ.pop('HTTP_PROXY', None)
@@ -199,7 +200,7 @@ async def get_format_for_youtube(ydl_opts, link, format_id='best', res='720p'):
     return chosen_format
 
 
-async def download_from_youtube(link, path='./videos/youtube', out_format="mp4", res="720p", format="best", filename=None):
+async def download_from_youtube(link, path='./videos/youtube', out_format="mp4", res="720p", format_id="best", filename=None):
     """
     Логика:
     1) Пытаться скачать БЕЗ прокси (player_client=web).
@@ -209,20 +210,23 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     """
     os.makedirs(path, exist_ok=True)
     loop = asyncio.get_running_loop()
-
+    logger.info(f"Trying to download video in format: {format_id}")
     result = None
 
     async def try_strategy(ydl_opts, tries=3):
         backoff = 1.0
         for i in range(1, tries + 1):
             try:
-                logger.info("Download attempt %d for client=%s proxy=%s format=%s", i, ydl_opts.get('extractor_args', {}).get('youtube', {}).get('player_client'), ydl_opts.get('proxy'), ydl_opts.get('format'))
+                logger.info(f"Download attempt {i} for client={ydl_opts.get('extractor_args', {}).get('youtube', {}).get('player_client')} proxy={ydl_opts.get('proxy')} format={ydl_opts.get('format')}")
                 res_local = await loop.run_in_executor(None, lambda: extract_info_sync(ydl_opts, link, download=True))
                 return res_local
             except SSLError as e:
-                logger.warning("SSLError attempt %d: %s", i, e)
+                logger.warning(f"SSLError attempt {i}: {e}")
+                ydl_opts['nocheckcertificate'] = True
             except Exception as e:
-                logger.warning("Download attempt %d failed: %s", i, e)
+                logger.warning(f"Download attempt {i} failed: {e}")
+                if 'Unable to download webpage' in str(e):
+                    ydl_opts['user_agent'] = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             if i < tries:
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 30)
@@ -231,12 +235,12 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     # 1) no-proxy, web-like
     try:
         ydl_opts = get_yt_dlp_conf(path, proxy=None, player_client=['default', 'web_safari'])
-        chosen_format = await get_format_for_youtube(ydl_opts, link, format, res)
+        chosen_format = await get_format_for_youtube(ydl_opts, link, format_id, res)
         ydl_opts['format'] = chosen_format
-        logger.info("Chosen format (no-proxy): %s", chosen_format)
+        logger.info(f"Chosen format (no-proxy): {chosen_format}")
         result = await try_strategy(ydl_opts, tries=3)
     except Exception as e:
-        logger.exception("Unexpected error in primary no-proxy flow: %s", e)
+        logger.exception(f"Unexpected error in primary no-proxy flow: {e}")
         result = None
 
     # fallback no-proxy alt client
@@ -246,7 +250,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
             ydl_opts_alt['format'] = 'best'
             result = await try_strategy(ydl_opts_alt, tries=2)
         except Exception as e:
-            logger.exception("Unexpected error in no-proxy fallback: %s", e)
+            logger.exception(f"Unexpected error in no-proxy fallback: {e}")
             result = None
 
     # 2) try with proxy(s)
@@ -256,19 +260,19 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
         try:
             proxy = get_random_proxy()
         except Exception as e:
-            logger.exception("get_random_proxy failed: %s", e)
+            logger.exception(f"get_random_proxy failed: {e}")
             proxy = None
 
         if proxy:
             # primary proxy attempt
             try:
                 ydl_opts_p = get_yt_dlp_conf(path, proxy=proxy, player_client=['default', 'web_safari'])
-                chosen_format_p = await get_format_for_youtube(ydl_opts_p, link, format, res)
+                chosen_format_p = await get_format_for_youtube(ydl_opts_p, link, format_id, res)
                 ydl_opts_p['format'] = chosen_format_p
                 logger.info("Chosen format (proxy): %s", chosen_format_p)
                 result = await try_strategy(ydl_opts_p, tries=3)
             except Exception as e:
-                logger.exception("Unexpected error preparing proxy attempt: %s", e)
+                logger.exception(f"Unexpected error preparing proxy attempt: {e}")
                 result = None
 
             # fallback proxy client
@@ -278,7 +282,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
                     ydl_opts_p2['format'] = 'best'
                     result = await try_strategy(ydl_opts_p2, tries=2)
                 except Exception as e:
-                    logger.exception("Unexpected error in proxy fallback: %s", e)
+                    logger.exception(f"Unexpected error in proxy fallback: {e}")
                     result = None
 
     # если успешно — формируем имя файла и возвращаем
