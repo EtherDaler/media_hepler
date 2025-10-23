@@ -561,6 +561,17 @@ def format_duration(seconds: int) -> str:
     else:
         return f"{minutes}:{seconds:02d}"
 
+def get_yt_info(ydl_opts, url, video_id):
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+        video_info = {
+            'id': video_id,
+            'title': info.get('title', 'Неизвестно'),
+            'channel': info.get('uploader', 'Неизвестно'),
+            'duration': format_duration(info.get('duration', 0)),
+            'views': 'N/A'
+        }
+    return video_info
 
 def get_youtube_video_info(url):
     os.environ.pop('ALL_PROXY', None)
@@ -574,15 +585,7 @@ def get_youtube_video_info(url):
     video_id = extract_video_id(url)
     video_info = None
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            video_info = {
-                'id': video_id,
-                'title': info.get('title', 'Неизвестно'),
-                'channel': info.get('uploader', 'Неизвестно'),
-                'duration': format_duration(info.get('duration', 0)),
-                'views': 'N/A'
-            }
+        video_info = get_yt_info(ydl_opts, url, video_id)
     except Exception as e:
         logger.error(f"Got Error while get_youtube_video_info: {e}. \nTry with Proxy...")
         proxy = get_random_proxy()
@@ -596,6 +599,7 @@ def get_youtube_video_info(url):
         os.environ['ALL_PROXY'] = p
         os.environ.pop('HTTP_PROXY', None)
         os.environ.pop('HTTPS_PROXY', None)
+        video_info = get_yt_info(ydl_opts, url, video_id)
     return video_info
 
 
