@@ -650,7 +650,7 @@ async def handle_search_query(message: Message, state: FSMContext):
             
         keyboard.append([
             InlineKeyboardButton(
-                f"{i}. {title}",
+                text=f"{i}. {title}",
                 callback_data=f"select_{i-1}"
             )
         ])
@@ -685,8 +685,8 @@ async def handle_youtube_link(message: Message, state: FSMContext):
         # Показываем действия для этого видео
         keyboard = [
             [
-                InlineKeyboardButton("🎵 Скачать аудио", callback_data="download_audio"),
-                InlineKeyboardButton("🎥 Скачать видео", callback_data="download_video"),
+                InlineKeyboardButton(text="🎵 Скачать аудио", callback_data="download_audio"),
+                InlineKeyboardButton(text="🎥 Скачать видео", callback_data="download_video"),
             ]
         ]
         reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
@@ -727,11 +727,11 @@ async def handle_video_selection(callback: CallbackQuery, state: FSMContext):
     # Создаем клавиатуру действий
     keyboard = [
         [
-            InlineKeyboardButton("◀️ Назад к списку", callback_data="back_to_list"),
-            InlineKeyboardButton("🎵 Скачать аудио", callback_data="download_audio"),
+            InlineKeyboardButton(text="◀️ Назад к списку", callback_data="back_to_list"),
+            InlineKeyboardButton(text="🎵 Скачать аудио", callback_data="download_audio"),
         ],
         [
-            InlineKeyboardButton("🎥 Скачать видео", callback_data="download_video"),
+            InlineKeyboardButton(text="🎥 Скачать видео", callback_data="download_video"),
         ]
     ]
     reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
@@ -764,7 +764,7 @@ async def handle_back_to_list(callback: CallbackQuery, state: FSMContext):
             
         keyboard.append([
             InlineKeyboardButton(
-                f"{i}. {title}",
+                text=f"{i}. {title}",
                 callback_data=f"select_{i-1}"
             )
         ])
@@ -856,7 +856,7 @@ async def handle_download_video(callback: CallbackQuery, state: FSMContext):
     for i, fmt in enumerate(formats, 1):
         keyboard.append([
             InlineKeyboardButton(
-                f"{i}. {fmt['resolution']} ({fmt['format_note']}) - {fmt['filesize']}",
+                text=f"{i}. {fmt['resolution']} ({fmt['format_note']}) - {fmt['filesize']}",
                 callback_data=f"format_{fmt['format_id']}"
             )
         ])
@@ -957,11 +957,11 @@ async def handle_back_to_actions(callback: CallbackQuery, state: FSMContext):
     # Создаем клавиатуру действий
     keyboard = [
         [
-            InlineKeyboardButton("◀️ Назад к списку", callback_data="back_to_list"),
-            InlineKeyboardButton("🎵 Скачать аудио", callback_data="download_audio"),
+            InlineKeyboardButton(text="◀️ Назад к списку", callback_data="back_to_list"),
+            InlineKeyboardButton(text="🎵 Скачать аудио", callback_data="download_audio"),
         ],
         [
-            InlineKeyboardButton("🎥 Скачать видео", callback_data="download_video"),
+            InlineKeyboardButton(text="🎥 Скачать видео", callback_data="download_video"),
         ]
     ]
     reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
