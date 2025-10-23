@@ -274,7 +274,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     if result is None:
         try:
             ydl_opts_alt = get_yt_dlp_conf(path, proxy=None, player_client=['android_embedded'])
-            ydl_opts_alt['format'] = '18'
+            ydl_opts_alt['format'] = 'best'
             result = await try_strategy(ydl_opts_alt, tries=1)
         except Exception as e:
             logger.exception(f"Unexpected error in no-proxy fallback: {e}")
@@ -306,7 +306,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
             if result is None:
                 try:
                     ydl_opts_p2 = get_yt_dlp_conf(path, proxy=proxy, player_client=['android_embedded'])
-                    ydl_opts_p2['format'] = '18'
+                    ydl_opts_p2['format'] = 'best'
                     result = await try_strategy(ydl_opts_p2, tries=1)
                 except Exception as e:
                     logger.exception(f"Unexpected error in proxy fallback: {e}")
@@ -563,7 +563,11 @@ def format_duration(seconds: int) -> str:
 
 
 def get_youtube_video_info(url):
-    ydl_opts = {'quiet': True, 'no_warnings': True}
+    ydl_opts = {
+        'quiet': True, 
+        'no_warnings': True,
+        'cookiefile': DEFAULT_YT_COOKIE
+    }
     video_id = extract_video_id(url)
     video_info = None
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
