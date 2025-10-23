@@ -30,7 +30,7 @@ BOT_TOKEN = config.BOT_TOKEN
 
 def check_bot_api_health():
     try:
-        response = requests.get(f"http://127.0.0.1:8081/bot{BOT_TOKEN}/getMe", timeout=5)
+        response = requests.get(f"http://127.0.0.1:8081/bot{BOT_TOKEN}/getMe")
         return response.status_code == 200
     except:
         return False

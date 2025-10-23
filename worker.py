@@ -269,7 +269,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
                     ydl_opts_p2['format'] = 'best'
                     result = await loop.run_in_executor(None, lambda: extract_info_sync(ydl_opts_p2, link, download=True))
                 except Exception as e_with_proxy_alt:
-                    logger.error("With-proxy fallback failed:", repr(e_with_proxy_alt))
+                    logger.error(f"With-proxy fallback failed: {repr(e_with_proxy_alt)}")
                     result = None
 
     # если успешно — формируем имя файла и возвращаем
