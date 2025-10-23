@@ -895,7 +895,7 @@ async def handle_download_video(callback: CallbackQuery, state: FSMContext):
     
     # Добавляем кнопку "Назад"
     keyboard.append([
-        InlineKeyboardButton("◀️ Назад", callback_data="back_to_actions")
+        InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_actions")
     ])
     
     reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
