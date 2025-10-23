@@ -16,6 +16,7 @@ from typing import Optional, Dict, Any, List
 from moviepy import VideoFileClip, AudioFileClip, concatenate_audioclips
 from youtube_search import YoutubeSearch
 from yt_dlp.networking.exceptions import SSLError
+from yt_dlp.utils import DownloadError
 
 from data.config import PROXYS, DEFAULT_YT_COOKIE
 
@@ -125,8 +126,8 @@ def get_yt_dlp_conf(path, proxy=None, player_client=["web"], player_js_version='
         'format': 'bestvideo[height<=1080]+bestaudio/best',
         'outtmpl': f'{path}/%(title)s.%(ext)s',
         'noplaylist': True,
-        'verbose': True,
-        'quiet': False,
+        'verbose': False,  # уменьшаем логирование
+        'quiet': True,     # уменьшаем логирование
         'extractor_args': {
             'youtube': {
                 'player_client': player_client,
@@ -140,6 +141,7 @@ def get_yt_dlp_conf(path, proxy=None, player_client=["web"], player_js_version='
         'socket_timeout': 30,
         'retries': 3,
         'fragment_retries': 10,
+        'nocheckcertificate': True,
         'skip_unavailable_fragments': True,
         'continue_dl': True,
         'cookiefile': DEFAULT_YT_COOKIE
@@ -174,73 +176,56 @@ def extract_info_sync(opts, url, download=False):
 async def get_format_for_youtube(ydl_opts, link, format_id='best', res='720p'):
     loop = asyncio.get_running_loop()
 
+    try:
+        info = await loop.run_in_executor(None, lambda: extract_info_sync(ydl_opts, link, download=False))
+    except (DownloadError, SSLError, Exception) as e:
+        # не падаем — логируем и возвращаем fallback
+        logger.warning(f"get_format_for_youtube: failed to extract info (will fallback). Error: {e}")
+        # если пользователь явно указал формат (например '137' или '96'), вернём его
+        if format_id and format_id != 'best':
+            return format_id
+        # иначе fallback на 'best'
+        return 'best'
+
+    formats = info.get('formats', []) or []
+
     def is_hls(fmt):
         proto = (fmt.get('protocol') or '').lower()
-        note = (fmt.get('format_note') or '').lower()
         ext = (fmt.get('ext') or '').lower()
-        # признаки HLS / m3u8
+        note = (fmt.get('format_note') or '').lower()
         return ('m3u8' in proto) or ('m3u8' in ext) or ('hls' in proto) or ('sabr' in note)
-    
-    if format_id != "best":
-        try:
-            info = await loop.run_in_executor(None, lambda: extract_info_sync(ydl_opts, link, download=False))
-            formats = info.get('formats', [])
-            
-            # Проверяем, существует ли запрошенный format_id
-            format_exists = any(f.get('format_id') == format_id for f in formats)
-            if not format_exists:
-                logger.warning(f"Requested format {format_id} not available, falling back to best")
-                format_id = "best"
-                
-        except Exception as e:
-            logger.warning(f"Error checking format availability: {e}, falling back to best")
-            format_id = "best"
 
-    if format_id == "best":
-        info = await loop.run_in_executor(None, lambda: extract_info_sync(ydl_opts, link, download=False))
-        formats = info.get('formats', [])
-        chosen_format = None
-        # предпочтение за id '18'
+    # если запрошен 'best' — подбираем prefer itag 18 или лучший <= res
+    if format_id == 'best':
+        # preference for itag 18
         for f in formats:
             if f.get('format_id') == '18':
-                chosen_format = '18'
-                break
-        if not chosen_format:
-            max_h = 1080
-            if isinstance(res, str) and res.endswith('p'):
-                try:
-                    max_h = int(res[:-1])
-                except Exception:
-                    pass
-            cand = [f for f in formats if (f.get('height') or 0) <= max_h and f.get('vcodec') != 'none']
-            if cand:
-                cand_sorted = sorted(cand, key=lambda x: ((x.get('height') or 0), (x.get('tbr') or 0)), reverse=True)
-                chosen_format = cand_sorted[0].get('format_id')
-            else:
-                chosen_format = 'best'
+                return '18'
+
+        max_h = 1080
+        if isinstance(res, str) and res.endswith('p'):
+            try:
+                max_h = int(res[:-1])
+            except Exception:
+                pass
+        cand = [f for f in formats if (f.get('vcodec') != 'none') and ((f.get('height') or 0) <= max_h)]
+        if cand:
+            cand_sorted = sorted(cand, key=lambda x: ((x.get('height') or 0), (x.get('tbr') or 0)), reverse=True)
+            return cand_sorted[0].get('format_id')
+        return 'best'
     else:
-        chosen_format = format_id
-        # Проверяем — не HLS ли выбранный формат. Если да — найдем альтернативу non-HLS
-        chosen_fmt_entry = next((f for f in formats if str(f.get('format_id')) == str(chosen_format)), None)
-        if chosen_fmt_entry and is_hls(chosen_fmt_entry):
-            logger.info(f"Chosen format {chosen_format} appears to be HLS (protocol={chosen_fmt_entry.get('protocol')}, ext={chosen_fmt_entry.get('ext')}, note={chosen_fmt_entry.get('format_note')}). Searching non-HLS fallback...",)
-            # ищем альтернативу: non-HLS, video present, <= max_h, prefer same/nearby resolution then tbr
-            max_h = 1080
-            if isinstance(res, str) and res.endswith('p'):
-                try:
-                    max_h = int(res[:-1])
-                except Exception:
-                    pass
-            candidates = [f for f in formats if not is_hls(f) and (f.get('vcodec') != 'none') and ((f.get('height') or 0) <= max_h)]
+        # явно указанный формат — но если он HLS, попробуем подобрать non-HLS fallback
+        chosen = str(format_id)
+        chosen_entry = next((f for f in formats if str(f.get('format_id')) == chosen), None)
+        if chosen_entry and is_hls(chosen_entry):
+            # ищем ближайшую non-HLS альтернативу
+            candidates = [f for f in formats if not is_hls(f) and (f.get('vcodec') != 'none')]
             if candidates:
                 cand_sorted = sorted(candidates, key=lambda x: ((x.get('height') or 0), (x.get('tbr') or 0)), reverse=True)
-                fallback = cand_sorted[0].get('format_id')
-                logger.info(f"Fallback non-HLS format selected: {fallback} (height={cand_sorted[0].get('height')}, tbr={cand_sorted[0].get('tbr')})")
-                return fallback
-            else:
-                logger.warning(f"No suitable non-HLS candidate found; returning original chosen format {chosen_format}")
-
-    return chosen_format
+                logger.info("Requested format %s is HLS — returning fallback non-HLS %s", chosen, cand_sorted[0].get('format_id'))
+                return cand_sorted[0].get('format_id')
+            # иначе возвращаем то, что попросили
+        return format_id
 
 
 async def download_from_youtube(link, path='./videos/youtube', out_format="mp4", res="720p", format_id="best", filename=None):
@@ -265,7 +250,6 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
                 return res_local
             except SSLError as e:
                 logger.warning(f"SSLError attempt {i}: {e}")
-                ydl_opts['nocheckcertificate'] = True
             except Exception as e:
                 logger.warning(f"Download attempt {i} failed: {e}")
                 if 'Unable to download webpage' in str(e):
@@ -290,7 +274,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     if result is None:
         try:
             ydl_opts_alt = get_yt_dlp_conf(path, proxy=None, player_client=['android_embedded'])
-            ydl_opts_alt['format'] = 'best'
+            ydl_opts_alt['format'] = '18'
             result = await try_strategy(ydl_opts_alt, tries=1)
         except Exception as e:
             logger.exception(f"Unexpected error in no-proxy fallback: {e}")
@@ -322,7 +306,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
             if result is None:
                 try:
                     ydl_opts_p2 = get_yt_dlp_conf(path, proxy=proxy, player_client=['android_embedded'])
-                    ydl_opts_p2['format'] = 'best'
+                    ydl_opts_p2['format'] = '18'
                     result = await try_strategy(ydl_opts_p2, tries=1)
                 except Exception as e:
                     logger.exception(f"Unexpected error in proxy fallback: {e}")
