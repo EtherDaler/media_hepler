@@ -805,7 +805,7 @@ async def handle_download_audio(callback: CallbackQuery, state: FSMContext):
     
     # Загружаем аудио
     link = f"https://www.youtube.com/watch?v={video_id}"
-    await callback.bot.send_chat_action(callback.chat.id, ChatAction.UPLOAD_VOICE)
+    await callback.bot.send_chat_action(callback.message.chat.id, ChatAction.UPLOAD_VOICE)
     try:
         filename = await worker.get_audio_from_youtube(link)
     except Exception as e:
