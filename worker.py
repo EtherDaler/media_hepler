@@ -346,6 +346,7 @@ def get_video_formats(url: str, max_formats=5):
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
+        'cookiefile': DEFAULT_YT_COOKIE
     }
     
     try:

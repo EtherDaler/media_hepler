@@ -923,7 +923,7 @@ async def handle_format_selection(callback: CallbackQuery, state: FSMContext):
         await state.clear()  # Очищаем состояние при ошибке
         return
     
-    link = f"https://www/youtube.com/watch?v={selected_video['id']}"
+    link = f"https://www.youtube.com/watch?v={selected_video['id']}"
     
     # Меняем сообщение на "загрузка"
     await callback.message.edit_text(
