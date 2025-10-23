@@ -8,8 +8,10 @@ import fnmatch
 import subprocess
 import random
 import re
+import requests
 import json
 import logging
+import urllib
 
 from datetime import datetime
 from typing import Optional, Dict, Any, List
@@ -330,10 +332,40 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     return None
 
 
+class YoutubeSearchWithProxy(YoutubeSearch):
+    def __init__(self, search_terms: str, max_results=None, proxy=None):
+        self.proxy = proxy
+        super().__init__(search_terms, max_results)
+    
+    def _search(self):
+        # Убедитесь, что установлен пакет для поддержки SOCKS: pip install requests[socks]
+        encoded_search = urllib.parse.quote_plus(self.search_terms)
+        BASE_URL = "https://youtube.com"
+        url = f"{BASE_URL}/results?search_query={encoded_search}"
+        
+        # Настройка прокси для SOCKS5h
+        proxies = None
+        if self.proxy:
+            proxies = {
+                'http': self.proxy,
+                'https': self.proxy
+            }
+        
+        response = requests.get(url, proxies=proxies).text
+        while "ytInitialData" not in response:
+            response = requests.get(url, proxies=proxies).text
+            
+        results = self._parse_html(response)
+        if self.max_results is not None and len(results) > self.max_results:
+            return results[: self.max_results]
+        return results
+
+
 def search_videos(query, max_results=8):
     """Поиск видео по запросу"""
     try:
-        results = YoutubeSearch(query, max_results=max_results).to_dict()
+        proxy = list(get_random_proxy().keys())[0]
+        results = YoutubeSearchWithProxy(query, max_results=max_results, proxy=proxy).to_dict()
         return results
     except Exception as e:
         logging.error(f"Ошибка поиска: {e}")
