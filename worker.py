@@ -12,7 +12,7 @@ import json
 import logging
 
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from moviepy import VideoFileClip, AudioFileClip, concatenate_audioclips
 from youtube_search import YoutubeSearch
 from data.config import PROXYS, DEFAULT_YT_COOKIE
@@ -163,29 +163,15 @@ def get_yt_dlp_conf(path, proxy=None, player_client=["web"], player_js_version='
     return ydl_opts
 
 
-async def download_from_youtube(link, path='./videos/youtube', out_format="mp4", res="720p", filename=None):
-    """
-    Логика:
-    1) Пытаться скачать БЕЗ прокси (player_client=web).
-    2) Если неудача — пробовать другие clients (android_embedded, tv_embedded) без прокси.
-    3) Если всё ещё неудача — попытки повторяются с прокси (если get_random_proxy() даёт прокси).
-    Возвращает имя файла (строку) или None.
-    """
-    os.makedirs(path, exist_ok=True)
+def extract_info_sync(opts, url, download=False):
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        return ydl.extract_info(url, download=download)
+
+
+async def get_format_for_youtube(ydl_opts, link, format):
     loop = asyncio.get_event_loop()
-
-    # helper: попытка с указанными ydl_opts (download=False чтобы получить info, затем download=True)
-    def extract_info_sync(opts, url, download=False):
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            return ydl.extract_info(url, download=download)
-
-    # шаги без прокси
-    attempts = []
-
-    # 1) Первый базовый вариант: web client, try to choose format 18 if present
-    try:
-        logger.info("Attempt: no-proxy, client=web -> extract_info")
-        ydl_opts = get_yt_dlp_conf(path, proxy=None, player_client=['default', 'web_safari'])
+    
+    if format == "best":
         info = await loop.run_in_executor(None, lambda: extract_info_sync(ydl_opts, link, download=False))
         formats = info.get('formats', [])
         # выбрать формат: предпочтение 18 (как в CLI)
@@ -208,6 +194,33 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
                 chosen_format = cand_sorted[0].get('format_id')
             else:
                 chosen_format = 'best'
+    else:
+        chosen_format = format
+    
+    return chosen_format
+    
+
+
+
+async def download_from_youtube(link, path='./videos/youtube', out_format="mp4", res="720p", format="best", filename=None):
+    """
+    Логика:
+    1) Пытаться скачать БЕЗ прокси (player_client=web).
+    2) Если неудача — пробовать другие clients (android_embedded, tv_embedded) без прокси.
+    3) Если всё ещё неудача — попытки повторяются с прокси (если get_random_proxy() даёт прокси).
+    Возвращает имя файла (строку) или None.
+    """
+    os.makedirs(path, exist_ok=True)
+    loop = asyncio.get_event_loop()
+
+    # шаги без прокси
+    attempts = []
+
+    # 1) Первый базовый вариант: web client, try to choose format 18 if present
+    try:
+        logger.info("Attempt: no-proxy, client=web -> extract_info")
+        ydl_opts = get_yt_dlp_conf(path, proxy=None, player_client=['default', 'web_safari'])
+        chosen_format = await get_format_for_youtube(ydl_opts, link, format)
         logger.info("Chosen format (no-proxy):", chosen_format)
         ydl_opts['format'] = chosen_format
 
@@ -239,26 +252,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
             try:
                 logger.info("Attempt: with-proxy, client=web -> extract_info")
                 ydl_opts_p = get_yt_dlp_conf(path, proxy=proxy, player_client=['default', 'web_safari'])
-                info_p = await loop.run_in_executor(None, lambda: extract_info_sync(ydl_opts_p, link, download=False))
-                formats_p = info_p.get('formats', [])
-                chosen_format_p = None
-                for f in formats_p:
-                    if f.get('format_id') == '18':
-                        chosen_format_p = '18'
-                        break
-                if not chosen_format_p:
-                    max_h = 1080
-                    if isinstance(res, str) and res.endswith('p'):
-                        try:
-                            max_h = int(res[:-1])
-                        except Exception:
-                            pass
-                    cand = [f for f in formats_p if (f.get('height') or 0) <= max_h and f.get('vcodec') != 'none']
-                    if cand:
-                        cand_sorted = sorted(cand, key=lambda x: (x.get('height') or 0, x.get('tbr') or 0), reverse=True)
-                        chosen_format_p = cand_sorted[0].get('format_id')
-                    else:
-                        chosen_format_p = 'best'
+                chosen_format_p = await get_format_for_youtube(ydl_opts_p, link, format)
                 logger.info("Chosen format (proxy):", chosen_format_p)
                 ydl_opts_p['format'] = chosen_format_p
 
@@ -304,6 +298,130 @@ def search_videos(query, max_results=5):
     except Exception as e:
         logging.error(f"Ошибка поиска: {e}")
         return []
+
+
+def get_video_formats(url: str, max_formats=5):
+    """Получение доступных форматов видео"""
+    
+    ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+    }
+    
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            
+            # Фильтруем форматы: только видео+аудио в MP4
+            video_formats = []
+            for f in info.get('formats', []):
+                if (f.get('vcodec') != 'none' and 
+                    f.get('acodec') != 'none' and 
+                    f.get('ext') == 'mp4'):
+                    
+                    format_info = {
+                        'format_id': f.get('format_id'),
+                        'resolution': f.get('resolution', 'N/A'),
+                        'format_note': f.get('format_note', 'N/A'),
+                        'filesize': format_filesize(f.get('filesize')),
+                        'quality': get_quality_score(f)
+                    }
+                    video_formats.append(format_info)
+            
+            # Сортируем по качеству и берем топ
+            video_formats.sort(key=lambda x: x['quality'], reverse=True)
+            return video_formats[:max_formats]
+            
+    except Exception as e:
+        logger.error(f"Ошибка получения форматов: {e}")
+        return []
+
+
+def get_quality_score(format_info):
+    """Оценка качества формата для сортировки"""
+    score = 0
+    resolution = format_info.get('resolution', '')
+    
+    if '1080' in resolution:
+        score += 300
+    elif '720' in resolution:
+        score += 200
+    elif '480' in resolution:
+        score += 100
+    
+    if 'mp4' in format_info.get('ext', ''):
+        score += 50
+    
+    filesize = format_info.get('filesize', 0)
+    if filesize:
+        score += min(filesize / (1024 * 1024), 100)  # Максимум 100 за размер
+        
+    return score
+
+
+def format_filesize(size_bytes):
+    """Форматирование размера файла"""
+    if not size_bytes:
+        return 0
+    
+    for unit in ['B', 'KB', 'MB', 'GB']:
+        if size_bytes < 1024.0:
+            break
+        size_bytes /= 1024.0
+    return size_bytes
+
+
+def format_filesize_str(size_bytes):
+    """Форматирование размера файла в строку"""
+    if not size_bytes:
+        return "Неизвестно"
+    
+    size = format_filesize(size_bytes)
+    units = ['B', 'KB', 'MB', 'GB']
+    unit_index = 0
+    while size >= 1024.0 and unit_index < len(units) - 1:
+        size /= 1024.0
+        unit_index += 1
+        
+    return f"{size:.1f} {units[unit_index]}"
+
+
+def format_formats_for_display(formats: List[Dict]) -> str:
+    """Форматирует список форматов для читаемого вывода"""
+    if not formats:
+        return "❌ Не удалось получить форматы для этого видео"
+    
+    output = "📹 **Доступные форматы:**\n\n"
+    
+    for i, fmt in enumerate(formats, 1):
+        output += f"🎥 **Формат {i}**\n"
+        output += f"   🆔 ID: `{fmt['format_id']}`\n"
+        output += f"   📊 Разрешение: {fmt['resolution']}\n"
+        output += f"   💾 Размер: {fmt['filesize']}\n"
+        output += f"   🎚 Качество: {fmt['format_note']}\n"
+        output += f"   📝 Тип: Видео+Аудио\n"
+        output += f"   🔤 Расширение: mp4\n\n"
+    
+    output += "💡 *Используйте ID формата для загрузки*"
+    return output
+
+
+def extract_video_id(url: str) -> str:
+    """Извлечение ID видео из YouTube ссылки"""
+    import re
+    
+    patterns = [
+        r'(?:youtube\.com/watch\?v=|youtu\.be/)([^&/\n?#]*)',
+        r'youtube\.com/embed/([^&/\n?#]*)',
+        r'youtube\.com/v/([^&/\n?#]*)'
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    
+    return None
 
 
 async def convert_to_audio(video, path='./audio/converted', out_format="mp3", filename=None):
@@ -387,7 +505,39 @@ def download_instagram_reels(reels_url):
             print(e)
             print(f"Get another cookie: ./instagram{cookie}.txt")
     return None
+
+
+def format_duration(seconds: int) -> str:
+    """Форматирование длительности из секунд"""
+    if not seconds:
+        return "N/A"
     
+    minutes, seconds = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    
+    if hours > 0:
+        return f"{hours}:{minutes:02d}:{seconds:02d}"
+    else:
+        return f"{minutes}:{seconds:02d}"
+
+
+def get_youtube_video_info(url):
+    ydl_opts = {'quiet': True, 'no_warnings': True}
+    video_id = extract_video_id(url)
+    video_info = None
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+        video_info = {
+            'id': video_id,
+            'title': info.get('title', 'Неизвестно'),
+            'channel': info.get('uploader', 'Неизвестно'),
+            'duration': format_duration(info.get('duration', 0)),
+            'views': 'N/A'
+        }
+
+    return video_info
+
+
 def replace_audio(video_path, audio_path, path="./videos/for_replace/ready"):
     os.makedirs(path, exist_ok=True)
     # Загружаем видео
@@ -529,7 +679,8 @@ if __name__ == "__main__":
     print("Welcome to audio/video helper!")
     print("To download youtube video input 1\nTo extract audio from video input 2\nTo download audio from youtube "
           "input 3\nTo download reels from instagram input 4\nTo change audio on video input 5\nTo download TikTok input 6 \n"
-          "To find yotube video input 7 \n")
+          "To find yotube video input 7 \n"
+          "To get youtube video formats input 8 \n")
     choise = int(input("Chose variant: "))
     if choise == 1:
         link = input("Give me the link: ")
@@ -557,9 +708,14 @@ if __name__ == "__main__":
         print(res)
         #downloader.list_formats(link)
     elif choise == 7:
-        text = input("Gimme what u want to find: ")
+        text = input("Give me what u want to find: ")
         res = search_videos(text)
         for item in res:
             print(f"{item['title']}\n - https://www.youtube.com/watch?v={item['id']}\n")
+    elif choise == 8:
+        link = input("Give me the link: ")
+        formats = get_video_formats(link)
+        res = format_formats_for_display(formats)
+        print(res)
     else:
         print("I don`t know what u wanna do!")

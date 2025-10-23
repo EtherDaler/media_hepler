@@ -7,7 +7,7 @@ import requests
 
 from aiogram import Router, F, Bot
 from aiogram.filters import Command, CommandStart
-from aiogram.types import Message, FSInputFile, ContentType, ReplyKeyboardRemove, InputFile, FSInputFile
+from aiogram.types import Message, FSInputFile, ContentType, ReplyKeyboardRemove, InputFile, FSInputFile, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.exceptions import TelegramEntityTooLarge, TelegramForbiddenError
@@ -97,6 +97,11 @@ class ReplaceAudioState(StatesGroup):
 class AnswerState(StatesGroup):
     tg_id = State()
     message = State()
+
+class YoutubeSearchState(StatesGroup):
+    search = State()
+    select_action = State()
+    select_format = State()
 
 @router.message(CommandStart())
 async def command_start_handler(message: Message, session: AsyncSession) -> None:
@@ -603,26 +608,390 @@ async def process_answer(message: Message, state: FSMContext) -> None:
     except TelegramForbiddenError:
         await message.answer("Пользователь заблокировал бота")
     await state.clear()
+
+
+@router.message(F.text, YoutubeSearchState.search)
+async def handle_search_query(message: Message, state: FSMContext):
+    """Обработка поискового запроса"""
+
+    # Очищаем предыдущие данные перед новым поиском
+    await state.update_data(
+        search_results=None,
+        current_video=None,
+        video_formats=None
+    )
+
+    query = message.text
+    user_id = message.from_user.id
+    username = message.from_user.username
+    # Проверяем, не является ли сообщение YouTube ссылкой
+    if "youtube.com" in query or "youtu.be" in query:
+        await handle_youtube_link(message, state)
+        return
+
+    await message.answer("🔍 Ищу видео...")
+
+    # Выполняем поиск
+    results = worker.search_videos(query)
+    if not results:
+        await message.answer("❌ По вашему запросу ничего не найдено.")
+        await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {query}, но не смог ничего найти. из #YouTube")
+        return
+
+    # Сохраняем результаты в состоянии
+    await state.update_data(search_results=results, search_query=query)
+
+    # Создаем клавиатуру с результатами
+    keyboard = []
+    for i, video in enumerate(results, 1):
+        title = video['title']
+        if len(title) > 35:
+            title = title[:32] + "..."
+            
+        keyboard.append([
+            InlineKeyboardButton(
+                f"{i}. {title}",
+                callback_data=f"select_{i-1}"
+            )
+        ])
+
+    reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+    await message.answer(
+        "🔍 **Найденные видео:**\n\nВыберите видео из списка:",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+
+    await state.set_state(YoutubeSearchState.select_action)
+
+
+async def handle_youtube_link(message: Message, state: FSMContext):
+    """Обработка прямой YouTube ссылки"""
+    url = message.text
+    video_id = worker.extract_video_id(url)
     
+    if not video_id:
+        await message.answer("❌ Неверная ссылка на YouTube.")
+        return
+    
+    # Получаем информацию о видео
+    try:
+        video_info = worker.get_youtube_video_info(url)
+
+        # Сохраняем выбранное видео
+        await state.update_data(selected_video=video_info)
+
+        # Показываем действия для этого видео
+        keyboard = [
+            [
+                InlineKeyboardButton("🎵 Скачать аудио", callback_data="download_audio"),
+                InlineKeyboardButton("🎥 Скачать видео", callback_data="download_video"),
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+        await message.answer(
+            f"🎬 **Найдено видео:** {video_info['title']}\n"
+            f"📺 Канал: {video_info['channel']}\n"
+            f"⏱ Длительность: {video_info['duration']}\n\n"
+            "Выберите действие:",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+
+        await state.set_state(YoutubeSearchState.select_action)
+   
+    except Exception as e:
+        logger.error(f"Ошибка обработки ссылки: {e}")
+        await message.answer("❌ Не удалось обработать ссылку.")
+
+
+@router.callback_query(F.data.startswith("select_"), YoutubeSearchState.select_action)
+async def handle_video_selection(callback: CallbackQuery, state: FSMContext):
+    """Обработка выбора видео из списка"""
+    choice_index = int(callback.data.split("_")[1])
+    
+    # Получаем данные из состояния
+    data = await state.get_data()
+    results = data.get('search_results', [])
+    
+    if not results or choice_index >= len(results):
+        await callback.message.edit_text("❌ Ошибка: видео не найдено.")
+        return
+    
+    # Сохраняем выбранное видео
+    selected_video = results[choice_index]
+    await state.update_data(selected_video=selected_video)
+    
+    # Создаем клавиатуру действий
+    keyboard = [
+        [
+            InlineKeyboardButton("◀️ Назад к списку", callback_data="back_to_list"),
+            InlineKeyboardButton("🎵 Скачать аудио", callback_data="download_audio"),
+        ],
+        [
+            InlineKeyboardButton("🎥 Скачать видео", callback_data="download_video"),
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+    
+    # Редактируем сообщение
+    await callback.message.edit_text(
+        f"🎬 **Выбрано:** {selected_video['title']}\n"
+        f"📺 Канал: {selected_video['channel']}\n"
+        f"⏱ Длительность: {selected_video['duration']}\n\n"
+        "Выберите действие:",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+    
+    await callback.answer()
+
+
+@router.callback_query(F.data == "back_to_list", YoutubeSearchState.select_action)
+async def handle_back_to_list(callback: CallbackQuery, state: FSMContext):
+    """Возврат к списку результатов"""
+    data = await state.get_data()
+    results = data.get('search_results', [])
+    
+    # Создаем клавиатуру с результатами
+    keyboard = []
+    for i, video in enumerate(results, 1):
+        title = video['title']
+        if len(title) > 35:
+            title = title[:32] + "..."
+            
+        keyboard.append([
+            InlineKeyboardButton(
+                f"{i}. {title}",
+                callback_data=f"select_{i-1}"
+            )
+        ])
+    
+    reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+    
+    await callback.message.edit_text(
+        "🔍 **Найденные видео:**\n\nВыберите видео из списка:",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+    
+    await callback.answer()
+
+
+@router.callback_query(F.data == "download_audio", YoutubeSearchState.select_action)
+async def handle_download_audio(callback: CallbackQuery, state: FSMContext):
+    """Обработка загрузки аудио"""
+    data = await state.get_data()
+    selected_video = data.get('selected_video')
+
+    user_id = callback.from_user.id
+    username = callback.from_user.username
+
+    if not selected_video:
+        await callback.message.edit_text("❌ Ошибка: видео не выбрано.")
+        await state.clear()  # Очищаем состояние при ошибке
+        return
+    
+    video_id = selected_video['id']
+    
+    # Меняем сообщение на "загрузка"
+    await callback.message.edit_text(
+        f"⏬ Загружаю аудио...\n\n"
+        f"🎬 {selected_video['title']}\n"
+        "Пожалуйста, подождите ⏳"
+    )
+    
+    # Загружаем аудио
+    filename, title = worker.download_audio(video_id)
+    link = f"https://www.youtube.com/watch?v={video_id}"
+    await callback.bot.send_chat_action(callback.chat.id, ChatAction.UPLOAD_VOICE)
+    try:
+        filename = await worker.get_audio_from_youtube(link)
+    except Exception as e:
+        logger.error(e)
+        filename = None    
+    if filename:
+        try:
+            doc = await callback.message.answer_document(document=FSInputFile(f"./audio/youtube/{filename}"), caption="Ваше аудио готово!\n@django_media_helper_bot")
+            await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', "")} и успешно скачал аудио из #YouTube")
+        except TelegramEntityTooLarge:
+            await callback.message.edit_text("Извините, размер файла слишком большой для отправки по Telegram.")
+            await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', "")}, но не смог скачать аудио из #YouTube, размер файла слишком большой")
+        if os.path.isfile(f"./audio/youtube/{filename}"):
+            os.remove(f"./audio/youtube/{filename}")
+    else:
+        await callback.message.edit_text("Извините, произошла ошибка. Видео недоступно!")
+        await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', "")}, но не смог скачать аудио из #YouTube")
+    
+    await state.clear()
+    await state.set_state(YoutubeSearchState.search)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "download_video", YoutubeSearchState.select_action)
+async def handle_download_video(callback: CallbackQuery, state: FSMContext):
+    """Обработка выбора загрузки видео - показ форматов"""
+    data = await state.get_data()
+    selected_video = data.get('selected_video')
+    
+    if not selected_video:
+        await callback.message.edit_text("❌ Ошибка: видео не выбрано.")
+        return
+    
+    video_id = selected_video['id']
+    
+    # Получаем доступные форматы
+    await callback.message.edit_text("🔄 Получаю доступные форматы...")
+    
+    formats = worker.get_video_formats(video_id)
+    
+    if not formats:
+        await callback.message.edit_text("❌ Не удалось получить форматы для этого видео.")
+        return
+    
+    # Создаем клавиатуру с форматами
+    keyboard = []
+    for i, fmt in enumerate(formats, 1):
+        keyboard.append([
+            InlineKeyboardButton(
+                f"{i}. {fmt['resolution']} ({fmt['format_note']}) - {fmt['filesize']}",
+                callback_data=f"format_{fmt['format_id']}"
+            )
+        ])
+    
+    # Добавляем кнопку "Назад"
+    keyboard.append([
+        InlineKeyboardButton("◀️ Назад", callback_data="back_to_actions")
+    ])
+    
+    reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+    
+    await callback.message.edit_text(
+        f"🎬 **{selected_video['title']}**\n\n"
+        "📹 **Доступные форматы:**\n"
+        "Выберите качество видео:",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+    
+    await state.set_state(YoutubeSearchState.select_format)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("format_"), YoutubeSearchState.select_format)
+async def handle_format_selection(callback: CallbackQuery, state: FSMContext):
+    """Обработка выбора формата видео"""
+    format_id = callback.data.split("_")[1]
+
+    user_id = callback.from_user.id
+    username = callback.from_user.username
+    
+    data = await state.get_data()
+    selected_video = data.get('selected_video')
+    
+    if not selected_video:
+        await callback.message.edit_text("❌ Ошибка: видео не выбрано.")
+        await state.clear()  # Очищаем состояние при ошибке
+        return
+    
+    link = f"https://www/youtube.com/watch?v={selected_video['id']}"
+    
+    # Меняем сообщение на "загрузка"
+    await callback.message.edit_text(
+        f"⏬ Загружаю видео...\n\n"
+        f"🎬 {selected_video['title']}\n"
+        "Пожалуйста, подождите ⏳"
+    )
+    
+    # Загружаем видео
+    try:
+        filename = await worker.download_from_youtube(link, format=format_id)
+    except Exception as e:
+        logger.error(e)
+        filename = None
+    if filename:
+        width, height = worker.get_video_resolution_moviepy(f"./videos/youtube/{filename}")
+        try:
+            doc = await callback.message.bot.send_video(callback.message.chat.id, FSInputFile(f"./videos/youtube/{filename}"), caption='Ваше видео готово!\n@django_media_helper_bot', supports_streaming=True, width=width, height=height)
+            await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', "")} и успешно скачал видео из #YouTube")
+            if not doc:
+                await callback.message.edit_text("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
+                await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', "")}, но не смог скачать видео из #YouTube")
+        except TelegramEntityTooLarge:
+            sended = send_video_through_api(callback.message.chat.id, f"./videos/youtube/{filename}", width, height)
+            if not sended:
+                await callback.message.edit_text("Извините, размер файла слишком большой для отправки по Telegram.")
+                await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', "")}, но не смог скачать видео из #YouTube, размер файла слишком большой")
+            else:
+                await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', "")} и успешно скачал видео из #YouTube")
+        except Exception as e:
+            logger.error(e)
+        finally:
+            if os.path.isfile(f"./videos/youtube/{filename}"):
+                os.remove(f"./videos/youtube/{filename}")
+    else:
+        await callback.message.edit_text("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
+        await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', "")}, но не смог скачать видео из #YouTube")
+        try:
+            if os.path.isfile(f"./videos/youtube/{filename}"):
+                os.remove(f"./videos/youtube/{filename}")
+        except Exception as e:
+            logger.error(e)
+        
+        # Обновляем сообщение
+        await callback.message.edit_text("✅ Видео успешно загружено!")
+    
+    await state.clear()
+    await state.set_state(YoutubeSearchState.search)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "back_to_actions", YoutubeSearchState.select_format)
+async def handle_back_to_actions(callback: CallbackQuery, state: FSMContext):
+    """Возврат к действиям после выбора видео"""
+    data = await state.get_data()
+    selected_video = data.get('selected_video', {})
+
+    # Создаем клавиатуру действий
+    keyboard = [
+        [
+            InlineKeyboardButton("◀️ Назад к списку", callback_data="back_to_list"),
+            InlineKeyboardButton("🎵 Скачать аудио", callback_data="download_audio"),
+        ],
+        [
+            InlineKeyboardButton("🎥 Скачать видео", callback_data="download_video"),
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+    await callback.message.edit_text(
+        f"🎬 **Выбрано:** {selected_video.get('title', 'Неизвестно')}\n\n"
+        "Выберите действие:",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+
+    await state.set_state(YoutubeSearchState.select_action)
+    await callback.answer()
 
 
 @router.message(Command("cancel"))
-@router.message(F.text.casefold() == "cancel")
+@router.message(F.text.casefold() == "отмена")
 async def cancel_handler(message: Message, state: FSMContext):
+    """Отмена текущего действия с очисткой состояния"""
     current_state = await state.get_state()
     if current_state is None:
         return
-
-    logging.info("Cancelling state %r", current_state)
-    data = await state.get_data()
-    if 'video' in data.keys():
-        if os.path.isfile(data['video']):
-                os.remove(data['video'])
-    if 'audio' in data.keys():
-        if os.path.isfile(data['audio']):
-                os.remove(data['audio'])
+    
     await state.clear()
-    await message.answer(
-        "Cancelled.",
-        reply_markup=ReplyKeyboardRemove(),
-    )
+    await message.answer("Действие отменено. Начните заново с /start", reply_markup=None)
+
+
+@router.message(Command("reset"))
+async def reset_handler(message: Message, state: FSMContext):
+    """Полный сброс состояния"""
+    await state.clear()
+    await state.set_state(YoutubeSearchState.search)
+    await message.answer("✅ Состояние сброшено. Начните новый поиск.")
