@@ -5,6 +5,7 @@ import metadata
 import logging
 import pinterest
 import requests
+import re
 
 from aiogram import Router, F, Bot
 from aiogram.filters import Command, CommandStart
@@ -18,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db import db_commands
 from data import config
 from models import User
-from fake_useragent import UserAgent
+from link_handler import handle_instagram_link, handle_youtube_link, handle_pinterest_link, handle_tiktok_link
 
 
 router = Router()
@@ -363,7 +364,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
             await message.answer("Извините, произошла ошибка. Видео недоступно!")
             await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать аудио из #YouTube")
     elif state_info["command_type"] == 'reel':
-        await message.answer("Подождите загружаем reels...")
+        await message.answer("Подождите загружаю reels...")
         await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)
         try:
             path = worker.download_instagram_reels(link)
@@ -645,6 +646,21 @@ async def handle_search_query(message: Message, state: FSMContext):
         await handle_youtube_link(message, state)
         return
 
+    # tiktok.com, www.tiktok.com, m.tiktok.com, vm.tiktok.com, vt.tiktok.com
+    if re.search(r"(?:^|\.)(tiktok\.com)$", query) or any(query.endswith(d) for d in ("tiktok.com", "vm.tiktok.com", "vt.tiktok.com")):
+        await handle_tiktok_link(message)
+        return
+
+    # домены: instagram.com, www.instagram.com, instagram.reel (rare), i.instagram.com
+    if query.endswith("instagram.com") or query in ("i.instagram.com",) or query.endswith("instagr.am"):
+        await handle_instagram_link(message)
+        return
+
+    # домены: pinterest.com, www.pinterest.com, pin.it (short)
+    if query.endswith("pinterest.com") or query.endswith("pin.it"):
+        await handle_pinterest_link(message)
+        return
+
     await message.answer("🔍 Ищу видео...")
 
     # Выполняем поиск
@@ -680,47 +696,6 @@ async def handle_search_query(message: Message, state: FSMContext):
     )
 
     await state.set_state(YoutubeSearchState.select_action)
-
-
-async def handle_youtube_link(message: Message, state: FSMContext):
-    """Обработка прямой YouTube ссылки"""
-    url = message.text
-    video_id = worker.extract_video_id(url)
-    
-    if not video_id:
-        await message.answer("❌ Неверная ссылка на YouTube.")
-        return
-    
-    # Получаем информацию о видео
-    try:
-        video_info = worker.get_youtube_video_info(url)
-
-        # Сохраняем выбранное видео
-        await state.update_data(selected_video=video_info)
-
-        # Показываем действия для этого видео
-        keyboard = [
-            [
-                InlineKeyboardButton(text="🎵 Скачать аудио", callback_data="download_audio"),
-                InlineKeyboardButton(text="🎥 Скачать видео", callback_data="download_video"),
-            ]
-        ]
-        reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
-
-        await message.answer(
-            f"🎬 **Найдено видео:** {video_info['title']}\n"
-            f"📺 Канал: {video_info['channel']}\n"
-            f"⏱ Длительность: {video_info['duration']}\n\n"
-            "Выберите действие:",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
-
-        await state.set_state(YoutubeSearchState.select_action)
-   
-    except Exception as e:
-        logger.error(f"Ошибка обработки ссылки: {e}")
-        await message.answer("❌ Не удалось обработать ссылку.")
 
 
 @router.callback_query(F.data.startswith("select_"), YoutubeSearchState.select_action)
