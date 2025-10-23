@@ -647,17 +647,17 @@ async def handle_search_query(message: Message, state: FSMContext):
         return
 
     # tiktok.com, www.tiktok.com, m.tiktok.com, vm.tiktok.com, vt.tiktok.com
-    if re.search(r"(?:^|\.)(tiktok\.com)$", query) or any(query.endswith(d) for d in ("tiktok.com", "vm.tiktok.com", "vt.tiktok.com")):
+    if re.search(r"(?:^|\.)(tiktok\.com)$", query) or any(d in query for d in ("tiktok.com", "vm.tiktok.com", "vt.tiktok.com")):
         await handle_tiktok_link(message)
         return
 
     # домены: instagram.com, www.instagram.com, instagram.reel (rare), i.instagram.com
-    if query.endswith("instagram.com") or query in ("i.instagram.com",) or query.endswith("instagr.am"):
+    if "instagram.com" in query or "i.instagram.com" in query or "instagr.am" in query:
         await handle_instagram_link(message)
         return
 
     # домены: pinterest.com, www.pinterest.com, pin.it (short)
-    if query.endswith("pinterest.com") or query.endswith("pin.it"):
+    if "pinterest.com" in query or "pin.it" in query:
         await handle_pinterest_link(message)
         return
 
