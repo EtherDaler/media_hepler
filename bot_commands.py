@@ -815,15 +815,15 @@ async def handle_download_audio(callback: CallbackQuery, state: FSMContext):
     if filename:
         try:
             doc = await callback.message.answer_document(document=FSInputFile(f"./audio/youtube/{filename}"), caption="Ваше аудио готово!\n@django_media_helper_bot")
-            await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', "")} и успешно скачал аудио из #YouTube")
+            await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')} и успешно скачал аудио из #YouTube")
         except TelegramEntityTooLarge:
             await callback.message.edit_text("Извините, размер файла слишком большой для отправки по Telegram.")
-            await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', "")}, но не смог скачать аудио из #YouTube, размер файла слишком большой")
+            await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')}, но не смог скачать аудио из #YouTube, размер файла слишком большой")
         if os.path.isfile(f"./audio/youtube/{filename}"):
             os.remove(f"./audio/youtube/{filename}")
     else:
         await callback.message.edit_text("Извините, произошла ошибка. Видео недоступно!")
-        await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', "")}, но не смог скачать аудио из #YouTube")
+        await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')}, но не смог скачать аудио из #YouTube")
     
     await state.clear()
     await state.set_state(YoutubeSearchState.search)
@@ -915,17 +915,17 @@ async def handle_format_selection(callback: CallbackQuery, state: FSMContext):
         width, height = worker.get_video_resolution_moviepy(f"./videos/youtube/{filename}")
         try:
             doc = await callback.message.bot.send_video(callback.message.chat.id, FSInputFile(f"./videos/youtube/{filename}"), caption='Ваше видео готово!\n@django_media_helper_bot', supports_streaming=True, width=width, height=height)
-            await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', "")} и успешно скачал видео из #YouTube")
+            await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')} и успешно скачал видео из #YouTube")
             if not doc:
                 await callback.message.edit_text("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
-                await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', "")}, но не смог скачать видео из #YouTube")
+                await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')}, но не смог скачать видео из #YouTube")
         except TelegramEntityTooLarge:
             sended = send_video_through_api(callback.message.chat.id, f"./videos/youtube/{filename}", width, height)
             if not sended:
                 await callback.message.edit_text("Извините, размер файла слишком большой для отправки по Telegram.")
-                await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', "")}, но не смог скачать видео из #YouTube, размер файла слишком большой")
+                await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')}, но не смог скачать видео из #YouTube, размер файла слишком большой")
             else:
-                await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', "")} и успешно скачал видео из #YouTube")
+                await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')} и успешно скачал видео из #YouTube")
         except Exception as e:
             logger.error(e)
         finally:
@@ -933,7 +933,7 @@ async def handle_format_selection(callback: CallbackQuery, state: FSMContext):
                 os.remove(f"./videos/youtube/{filename}")
     else:
         await callback.message.edit_text("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
-        await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', "")}, но не смог скачать видео из #YouTube")
+        await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')}, но не смог скачать видео из #YouTube")
         try:
             if os.path.isfile(f"./videos/youtube/{filename}"):
                 os.remove(f"./videos/youtube/{filename}")
