@@ -173,6 +173,29 @@ def extract_info_sync(opts, url, download=False):
 
 async def get_format_for_youtube(ydl_opts, link, format_id='best', res='720p'):
     loop = asyncio.get_running_loop()
+
+    def is_hls(fmt):
+        proto = (fmt.get('protocol') or '').lower()
+        note = (fmt.get('format_note') or '').lower()
+        ext = (fmt.get('ext') or '').lower()
+        # признаки HLS / m3u8
+        return ('m3u8' in proto) or ('m3u8' in ext) or ('hls' in proto) or ('sabr' in note)
+    
+    if format_id != "best":
+        try:
+            info = await loop.run_in_executor(None, lambda: extract_info_sync(ydl_opts, link, download=False))
+            formats = info.get('formats', [])
+            
+            # Проверяем, существует ли запрошенный format_id
+            format_exists = any(f.get('format_id') == format_id for f in formats)
+            if not format_exists:
+                logger.warning(f"Requested format {format_id} not available, falling back to best")
+                format_id = "best"
+                
+        except Exception as e:
+            logger.warning(f"Error checking format availability: {e}, falling back to best")
+            format_id = "best"
+
     if format_id == "best":
         info = await loop.run_in_executor(None, lambda: extract_info_sync(ydl_opts, link, download=False))
         formats = info.get('formats', [])
@@ -197,6 +220,26 @@ async def get_format_for_youtube(ydl_opts, link, format_id='best', res='720p'):
                 chosen_format = 'best'
     else:
         chosen_format = format_id
+        # Проверяем — не HLS ли выбранный формат. Если да — найдем альтернативу non-HLS
+        chosen_fmt_entry = next((f for f in formats if str(f.get('format_id')) == str(chosen_format)), None)
+        if chosen_fmt_entry and is_hls(chosen_fmt_entry):
+            logger.info(f"Chosen format {chosen_format} appears to be HLS (protocol={chosen_fmt_entry.get('protocol')}, ext={chosen_fmt_entry.get('ext')}, note={chosen_fmt_entry.get('format_note')}). Searching non-HLS fallback...",)
+            # ищем альтернативу: non-HLS, video present, <= max_h, prefer same/nearby resolution then tbr
+            max_h = 1080
+            if isinstance(res, str) and res.endswith('p'):
+                try:
+                    max_h = int(res[:-1])
+                except Exception:
+                    pass
+            candidates = [f for f in formats if not is_hls(f) and (f.get('vcodec') != 'none') and ((f.get('height') or 0) <= max_h)]
+            if candidates:
+                cand_sorted = sorted(candidates, key=lambda x: ((x.get('height') or 0), (x.get('tbr') or 0)), reverse=True)
+                fallback = cand_sorted[0].get('format_id')
+                logger.info(f"Fallback non-HLS format selected: {fallback} (height={cand_sorted[0].get('height')}, tbr={cand_sorted[0].get('tbr')})")
+                return fallback
+            else:
+                logger.warning(f"No suitable non-HLS candidate found; returning original chosen format {chosen_format}")
+
     return chosen_format
 
 
@@ -204,8 +247,8 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     """
     Логика:
     1) Пытаться скачать БЕЗ прокси (player_client=web).
-    2) Если неудача — пробовать другие clients (android_embedded, tv_embedded) без прокси.
-    3) Если всё ещё неудача — попытки повторяются с прокси (если get_random_proxy() даёт прокси).
+    2) Если всё ещё неудача — попытки повторяются с прокси (если get_random_proxy() даёт прокси).
+    Если неудача — пробовать другие clients (android_embedded, tv_embedded) без прокси.
     Возвращает имя файла (строку) или None.
     """
     os.makedirs(path, exist_ok=True)
@@ -238,7 +281,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
         chosen_format = await get_format_for_youtube(ydl_opts, link, format_id, res)
         ydl_opts['format'] = chosen_format
         logger.info(f"Chosen format (no-proxy): {chosen_format}")
-        result = await try_strategy(ydl_opts, tries=3)
+        result = await try_strategy(ydl_opts, tries=1)
     except Exception as e:
         logger.exception(f"Unexpected error in primary no-proxy flow: {e}")
         result = None
@@ -248,7 +291,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
         try:
             ydl_opts_alt = get_yt_dlp_conf(path, proxy=None, player_client=['android_embedded'])
             ydl_opts_alt['format'] = 'best'
-            result = await try_strategy(ydl_opts_alt, tries=2)
+            result = await try_strategy(ydl_opts_alt, tries=1)
         except Exception as e:
             logger.exception(f"Unexpected error in no-proxy fallback: {e}")
             result = None
@@ -269,8 +312,8 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
                 ydl_opts_p = get_yt_dlp_conf(path, proxy=proxy, player_client=['default', 'web_safari'])
                 chosen_format_p = await get_format_for_youtube(ydl_opts_p, link, format_id, res)
                 ydl_opts_p['format'] = chosen_format_p
-                logger.info("Chosen format (proxy): %s", chosen_format_p)
-                result = await try_strategy(ydl_opts_p, tries=3)
+                logger.info(f"Chosen format (proxy): {chosen_format_p}")
+                result = await try_strategy(ydl_opts_p, tries=1)
             except Exception as e:
                 logger.exception(f"Unexpected error preparing proxy attempt: {e}")
                 result = None
@@ -280,7 +323,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
                 try:
                     ydl_opts_p2 = get_yt_dlp_conf(path, proxy=proxy, player_client=['android_embedded'])
                     ydl_opts_p2['format'] = 'best'
-                    result = await try_strategy(ydl_opts_p2, tries=2)
+                    result = await try_strategy(ydl_opts_p2, tries=1)
                 except Exception as e:
                     logger.exception(f"Unexpected error in proxy fallback: {e}")
                     result = None
