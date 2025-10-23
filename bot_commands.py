@@ -934,7 +934,7 @@ async def handle_format_selection(callback: CallbackQuery, state: FSMContext):
     
     # Загружаем видео
     try:
-        filename = await worker.download_from_youtube(link, format=format_id)
+        filename = await worker.download_from_youtube(link, format_id=format_id)
     except Exception as e:
         logger.error(e)
         filename = None
