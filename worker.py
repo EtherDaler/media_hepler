@@ -346,7 +346,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     return None
 
 
-def search_videos(query, max_results=5):
+def search_videos(query, max_results=8):
     """Поиск видео по запросу"""
     try:
         results = YoutubeSearch(query, max_results=max_results).to_dict()
