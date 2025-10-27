@@ -46,11 +46,6 @@ async def handle_youtube_link(message: Message, state: FSMContext):
     """Обработка прямой YouTube ссылки"""
     from bot_commands import YoutubeSearchState
     url = message.text
-    video_id = worker.extract_video_id(url)
-    
-    if not video_id:
-        await message.answer("❌ Неверная ссылка на YouTube.")
-        return
     
     # Получаем информацию о видео
     try:
