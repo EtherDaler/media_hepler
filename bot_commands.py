@@ -7,7 +7,7 @@ import pinterest
 import requests
 import re
 
-from aiogram import Router, F, Bot
+from aiogram import Router, F
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message, FSInputFile, ContentType, FSInputFile, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.fsm.context import FSMContext
@@ -129,6 +129,46 @@ def send_video_through_api(chat_id, file_path, width, height):
     else:
         logger.error(f"Ошибка при отправке видео: {response.status_code}, {response.text}")
         return False
+
+
+def send_audio_through_api(chat_id: int, file_path: str) -> bool:
+    """
+    Отправка аудио в Telegram через API (аналогично send_video_through_api)
+    """
+    url = f"http://127.0.0.1:8081/bot{BOT_TOKEN}/sendAudio"
+    
+    if not os.path.isfile(file_path):
+        logger.error(f"Файл {file_path} не найден.")
+        return False
+    
+    try:
+        with open(file_path, 'rb') as audio_file:
+            files = {
+                'audio': (os.path.basename(file_path), audio_file, 'audio/mpeg')
+            }
+            headers = {
+                'Connection': 'close',
+                'Expect': ''
+            }
+            data = {
+                'chat_id': chat_id,
+                'caption': 'Ваше аудио готово!\n@django_media_helper_bot',
+                'title': os.path.basename(file_path)
+            }
+            response = requests.post(url, headers=headers, data=data, files=files, timeout=(30, 300))
+            logger.info(f"Audio API Response: {response.status_code}")
+    except Exception as e:
+        logger.error(f"Ошибка при отправке аудио: {e}")
+        return False
+    
+    # Удаляем файл после отправки
+    if os.path.isfile(file_path):
+        try:
+            os.remove(file_path)
+        except Exception as e:
+            logger.warning(f"Не удалось удалить файл {file_path}: {e}")
+    
+    return response.status_code == 200
 
 
 class YoutubeState(StatesGroup):
@@ -371,6 +411,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
             except Exception as e:
                 logger.error(f"Другая ошибка при отправке: {e}")
                 await message.answer("Извините, произошла неизвестная ошибка при отправке видео.")
+                await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #YouTube, {e}")
             finally:
                 if os.path.isfile(f"./videos/youtube/{filename}"):
                     os.remove(f"./videos/youtube/{filename}")
@@ -396,10 +437,20 @@ async def get_link(message: Message, state: FSMContext) -> None:
                 doc = await message.answer_document(document=FSInputFile(f"./audio/youtube/{filename}"), caption="Ваше аудио готово!\n@django_media_helper_bot")
                 await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал аудио из #YouTube")
             except TelegramEntityTooLarge:
-                await message.answer("Извините, размер файла слишком большой для отправки по Telegram.")
-                await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать аудио из #YouTube, размер файла слишком большой")
-            if os.path.isfile(f"./audio/youtube/{filename}"):
-                os.remove(f"./audio/youtube/{filename}")
+                logger.info("Обнаружен TelegramEntityTooLarge, переходим к отправке через API")
+                sended = send_audio_through_api(message.chat.id, f"./audio/youtube/{filename}")
+                if not sended:
+                    await message.answer("Извините, размер файла слишком большой для отправки по Telegram.")
+                    await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать аудио из #YouTube, размер файла слишком большой")
+                else:
+                    await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал аудио из #YouTube")
+            except Exception as e:
+                logger.error(f"Другая ошибка при отправке: {e}")
+                await message.answer("Извините, произошла неизвестная ошибка при отправке аудио.")
+                await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать аудио из #YouTube, {e}")
+            finally:
+                if os.path.isfile(f"./audio/youtube/{filename}"):
+                    os.remove(f"./audio/youtube/{filename}")
         else:
             await message.answer("Извините, произошла ошибка. Видео недоступно!")
             await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать аудио из #YouTube")
@@ -854,10 +905,20 @@ async def handle_download_audio(callback: CallbackQuery, state: FSMContext):
             doc = await callback.message.answer_document(document=FSInputFile(f"./audio/youtube/{filename}"), caption="Ваше аудио готово!\n@django_media_helper_bot")
             await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')} и успешно скачал аудио из #YouTube")
         except TelegramEntityTooLarge:
-            await callback.message.edit_text("Извините, размер файла слишком большой для отправки по Telegram.")
-            await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')}, но не смог скачать аудио из #YouTube, размер файла слишком большой")
-        if os.path.isfile(f"./audio/youtube/{filename}"):
-            os.remove(f"./audio/youtube/{filename}")
+            logger.info("Обнаружен TelegramEntityTooLarge, переходим к отправке через API")
+            sended = send_audio_through_api(callback.message.chat.id, f"./audio/youtube/{filename}")
+            if not sended:
+                await callback.message.edit_text("Извините, размер файла слишком большой для отправки по Telegram.")
+                await callback.message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')}, но не смог скачать аудио из #YouTube, размер файла слишком большой")
+            else:
+                await callback.message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')} и успешно скачал аудио из #YouTube")
+        except Exception as e:
+            logger.error(f"Другая ошибка при отправке: {e}")
+            await callback.message.edit_text("Извините, произошла неизвестная ошибка при отправке аудио.")
+            await callback.message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')}, но не смог скачать аудио из #YouTube, {e}")
+        finally:
+            if os.path.isfile(f"./audio/youtube/{filename}"):
+                os.remove(f"./audio/youtube/{filename}")
     else:
         await callback.message.edit_text("Извините, произошла ошибка. Видео недоступно!")
         await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')}, но не смог скачать аудио из #YouTube")
