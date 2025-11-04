@@ -36,7 +36,11 @@ def check_bot_api_health():
     try:
         # Используем тот же URL, что и в curl
         health_url = f"http://127.0.0.1:8081/bot{BOT_TOKEN}/getMe"
-        response = requests.get(health_url, timeout=10)
+        headers = {
+            'Connection': 'close',
+            'Expect': ''   # попытка убрать Expect: 100-continue
+        }
+        response = requests.get(health_url, headers=headers, timeout=10)
         
         logger.info(f"Bot API Health Check - Status: {response.status_code}")
         
@@ -78,6 +82,10 @@ def send_video_through_api(chat_id, file_path, width, height):
     if not os.path.isfile(file_path):
         logger.error(f"Файл {file_path} не найден.")
         return False
+    
+    if not check_bot_api_health():
+        logger.error("Локальный API не доступен")
+        return False
 
     # Отправка запроса
     try:
@@ -86,6 +94,10 @@ def send_video_through_api(chat_id, file_path, width, height):
                 # явно указываем имя файла и mime
                 'video': (os.path.basename(file_path), video, mimetypes.guess_type(file_path)[0] or 'application/octet-stream')
             }
+            headers = {
+                'Connection': 'close',
+                'Expect': ''   # попытка убрать Expect: 100-continue
+            }
             data = {
                 'chat_id': chat_id,
                 'caption': 'Ваше видео готово!\n@django_media_helper_bot',
@@ -93,7 +105,7 @@ def send_video_through_api(chat_id, file_path, width, height):
                 'height': height,
                 'supports_streaming': True
             }
-            response = requests.post(url, data=data, files=files, timeout=(30, 300))
+            response = requests.post(url, headers=headers, data=data, files=files, timeout=(30, 300))
             logger.info(f"API Response: {response.status_code}, {response.text}")
     except requests.exceptions.Timeout:
         logger.error("Таймаут при отправке видео")
