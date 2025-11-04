@@ -314,6 +314,10 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
                     logger.exception(f"Unexpected error in proxy fallback: {e}")
                     result = None
 
+    os.environ.pop('ALL_PROXY', None)
+    os.environ.pop('HTTP_PROXY', None)
+    os.environ.pop('HTTPS_PROXY', None)
+
     # если успешно — формируем имя файла и возвращаем
     if result is not None:
         video_title = result.get('title', 'video').strip()
