@@ -30,10 +30,33 @@ BOT_TOKEN = config.BOT_TOKEN
 
 
 def check_bot_api_health():
+    """
+    Проверка доступности локального Bot API
+    """
     try:
-        response = requests.get(f"http://127.0.0.1:8081/bot{BOT_TOKEN}/getMe")
-        return response.status_code == 200
-    except:
+        # Используем тот же URL, что и в curl
+        health_url = f"http://127.0.0.1:8081/bot{BOT_TOKEN}/getMe"
+        response = requests.get(health_url, timeout=10)
+        
+        logger.info(f"Bot API Health Check - Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            is_ok = data.get('ok', False)
+            logger.info(f"Bot API is OK: {is_ok}")
+            return is_ok
+        else:
+            logger.error(f"Bot API Health Check failed: {response.status_code}")
+            return False
+            
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"Bot API ConnectionError: {e}")
+        return False
+    except requests.exceptions.Timeout as e:
+        logger.error(f"Bot API Timeout: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Bot API Health Check error: {e}")
         return False
     
 
