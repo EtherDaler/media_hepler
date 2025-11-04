@@ -73,10 +73,6 @@ def send_video_through_api(chat_id, file_path, width, height):
     # Telegram API URL
     url = f"http://127.0.0.1:8081/bot{BOT_TOKEN}/sendVideo"
     response = None
-    # Проверяем доступность API перед отправкой
-    if not check_bot_api_health():
-        logger.error("Локальный Bot API недоступен")
-        return False
 
     # Проверяем существование файла
     if not os.path.isfile(file_path):
