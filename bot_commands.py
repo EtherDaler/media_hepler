@@ -1,7 +1,7 @@
-import asyncio
 import os
 import worker
 import metadata
+import mimetypes
 import logging
 import pinterest
 import requests
@@ -63,7 +63,10 @@ def send_video_through_api(chat_id, file_path, width, height):
     # Отправка запроса
     try:
         with open(file_path, 'rb') as video:
-            files = {'video': video}
+            files = {
+                # явно указываем имя файла и mime
+                'video': (os.path.basename(file_path), video, mimetypes.guess_type(file_path)[0] or 'application/octet-stream')
+            }
             data = {
                 'chat_id': chat_id,
                 'caption': 'Ваше видео готово!\n@django_media_helper_bot',
