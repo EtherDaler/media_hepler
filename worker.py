@@ -628,6 +628,86 @@ async def download_instagram_reels(reels_url):
     return await asyncio.to_thread(_download_instagram_reels_sync, reels_url)
 
 
+def download_instagram_reels_v2(reels_url):
+    """
+    Скачивание Instagram reels с автоматическим перекодированием для iOS.
+    Перекодирование встроено в yt-dlp, не требует отдельного вызова reencode_video.
+    
+    Для тестирования: python worker.py, затем выбрать вариант 4 и ввести ссылку.
+    """
+    import shutil
+    import tempfile
+    
+    path = "./videos/reels"
+    os.makedirs(path, exist_ok=True)
+    i = reels_url.find("reel")
+    j = reels_url[i+5:].find('/')
+    filename = reels_url[i+5:i+5+j]
+    ind = 0
+    while os.path.isfile(f"{path}/{filename}.mp4"):
+        filename = filename + f"({ind})"
+        ind += 1
+    filename = filename.strip()
+    cookies = ['0', '1', '2']
+    
+    while len(cookies) > 0:
+        cookie = random.choice(cookies)
+        original_cookie_path = f'./instagram{cookie}.txt'
+        tmp_cookie_path = None
+        
+        try:
+            if not os.path.exists(original_cookie_path):
+                raise FileNotFoundError(f"Cookie file not found: {original_cookie_path}")
+            
+            tmp_fd, tmp_cookie_path = tempfile.mkstemp(suffix='.txt')
+            os.close(tmp_fd)
+            shutil.copy2(original_cookie_path, tmp_cookie_path)
+        except FileNotFoundError:
+            logger.warning(f"Cookie file not found: {original_cookie_path}")
+            cookies.remove(cookie)
+            continue
+        
+        try:
+            ydl_opts = {
+                'outtmpl': f"{path}/{filename}.%(ext)s",
+                'cookiefile': tmp_cookie_path,
+                'format': 'bestvideo+bestaudio/best',
+                'merge_output_format': 'mp4',
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
+                },
+                # Автоматическое перекодирование для совместимости с iOS
+                'postprocessors': [{
+                    'key': 'FFmpegVideoConvertor',
+                    'preferedformat': 'mp4',
+                }],
+                'postprocessor_args': {
+                    'FFmpegVideoConvertor': [
+                        '-c:v', 'libx264',
+                        '-preset', 'veryfast',
+                        '-crf', '23',
+                        '-profile:v', 'baseline',
+                        '-level', '3.1',
+                        '-pix_fmt', 'yuv420p',
+                        '-c:a', 'aac',
+                        '-b:a', '128k',
+                        '-movflags', '+faststart',
+                    ]
+                },
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([reels_url])
+            logger.info(f"Downloaded and encoded: {path}/{filename}.mp4")
+            return f"{path}/{filename}.mp4"
+        except Exception as e:
+            cookies.remove(cookie)
+            logger.error(f"Failed with cookie {cookie}: {e}")
+        finally:
+            if tmp_cookie_path and os.path.exists(tmp_cookie_path):
+                os.remove(tmp_cookie_path)
+    return None
+
+
 def format_duration(seconds: int) -> str:
     """Форматирование длительности из секунд"""
     if not seconds:
@@ -825,7 +905,8 @@ if __name__ == "__main__":
     print("To download youtube video input 1\nTo extract audio from video input 2\nTo download audio from youtube "
           "input 3\nTo download reels from instagram input 4\nTo change audio on video input 5\nTo download TikTok input 6 \n"
           "To find yotube video input 7 \n"
-          "To get youtube video formats input 8 \n")
+          "To get youtube video formats input 8 \n"
+          "To download reels V2 (with auto reencode for iOS) input 9 \n")
     choise = int(input("Chose variant: "))
     if choise == 1:
         link = input("Give me the link: ")
@@ -862,5 +943,12 @@ if __name__ == "__main__":
         formats = get_video_formats(link)
         res = format_formats_for_display(formats)
         print(res)
+    elif choise == 9:
+        link = input("Give me the Instagram reel link: ")
+        result = download_instagram_reels_v2(link)
+        if result:
+            print(f"Done! Video saved to: {result}")
+        else:
+            print("Failed to download video")
     else:
         print("I don`t know what u wanna do!")
