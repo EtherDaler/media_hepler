@@ -543,11 +543,24 @@ async def get_audio_from_youtube(link, path="./audio/youtube", out_format="mp3",
     return audio
 
 def reencode_video(path_to_video):
+    """
+    Перекодирует видео для совместимости с iOS/Telegram.
+    Оптимизировано для скорости с сохранением совместимости.
+    """
     output_path = path_to_video.replace('.mp4', '_reencoded.mp4')
     command = [
-        'ffmpeg', '-i', path_to_video, 
-        '-c:v', 'libx264', '-c:a', 'aac', '-strict', 'experimental', 
-        '-movflags', 'faststart', output_path
+        'ffmpeg', '-i', path_to_video,
+        '-c:v', 'libx264',
+        '-preset', 'veryfast',      # Быстрое кодирование (в 3-5 раз быстрее дефолта)
+        '-crf', '23',               # Хорошее качество
+        '-profile:v', 'baseline',   # Максимальная совместимость с iOS
+        '-level', '3.1',
+        '-pix_fmt', 'yuv420p',      # Совместимость с iOS
+        '-c:a', 'aac',
+        '-b:a', '128k',             # Битрейт аудио
+        '-movflags', '+faststart',  # Метаданные в начале для стриминга
+        '-y',                       # Перезаписывать без вопросов
+        output_path
     ]
     subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     return output_path
