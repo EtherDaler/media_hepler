@@ -463,14 +463,14 @@ async def get_link(message: Message, state: FSMContext) -> None:
             logger.error(e)
             filename = None
         if path:
-            reencoded_path = worker.reencode_video(path)
+            #reencoded_path = worker.reencode_video(path)
             try:
-                doc = await message.answer_document(document=FSInputFile(reencoded_path), caption="Ваш reels готов!\n@django_media_helper_bot")
+                doc = await message.answer_document(document=FSInputFile(path), caption="Ваш reels готов!\n@django_media_helper_bot")
                 await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #reels")
             except TelegramEntityTooLarge:
                 logger.info("Обнаружен TelegramEntityTooLarge, переходим к отправке через API")
-                width, height = worker.get_video_resolution_moviepy(reencoded_path)
-                sended = send_video_through_api(message.chat.id, reencoded_path, width, height)
+                width, height = worker.get_video_resolution_moviepy(path)
+                sended = send_video_through_api(message.chat.id, path, width, height)
                 if not sended:
                     await message.answer("Извините, размер файла слишком большой для отправки по Telegram.")
                     await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #reels, размер файла слишком большой")
@@ -481,16 +481,13 @@ async def get_link(message: Message, state: FSMContext) -> None:
                 await message.answer("Извините, произошла неизвестная ошибка при отправке видео.")
                 await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #reels, {e}")
             finally:
-                if os.path.isfile(reencoded_path):
-                    os.remove(reencoded_path)
+                #if os.path.isfile(reencoded_path):
+                #    os.remove(reencoded_path)
+                if os.path.isfile(path):
+                    os.remove(path)
         else:
             await message.answer("Произошла ошибка при загрузке reels. Попробуйте воспользоваться функцией позже.")
             await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #reels")
-        try:            
-            if os.path.isfile(path):
-                os.remove(path)
-        except Exception as e:
-            print(e)
 
     elif state_info["command_type"] == 'pinterest':
         await message.answer("Подождите загружаем видео...")

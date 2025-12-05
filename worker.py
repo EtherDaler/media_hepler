@@ -625,15 +625,15 @@ def _download_instagram_reels_sync(reels_url):
 
 async def download_instagram_reels(reels_url):
     """Асинхронная функция скачивания Instagram reels"""
-    return await asyncio.to_thread(_download_instagram_reels_sync, reels_url)
+    return await asyncio.to_thread(_download_instagram_reels_sync_v2, reels_url)
 
 
-def download_instagram_reels_v2(reels_url):
+def _download_instagram_reels_sync_v2(reels_url):
     """
     Скачивание Instagram reels с автоматическим перекодированием для iOS.
-    Перекодирование встроено в yt-dlp, не требует отдельного вызова reencode_video.
+    Скачивает видео, затем перекодирует через ffmpeg в одной функции.
     
-    Для тестирования: python worker.py, затем выбрать вариант 4 и ввести ссылку.
+    Для тестирования: python worker.py, затем выбрать вариант 9 и ввести ссылку.
     """
     import shutil
     import tempfile
@@ -644,7 +644,7 @@ def download_instagram_reels_v2(reels_url):
     j = reels_url[i+5:].find('/')
     filename = reels_url[i+5:i+5+j]
     ind = 0
-    while os.path.isfile(f"{path}/{filename}.mp4"):
+    while os.path.isfile(f"{path}/{filename}.mp4") or os.path.isfile(f"{path}/{filename}_ios.mp4"):
         filename = filename + f"({ind})"
         ind += 1
     filename = filename.strip()
@@ -668,40 +668,57 @@ def download_instagram_reels_v2(reels_url):
             continue
         
         try:
+            # Шаг 1: Скачиваем видео
+            temp_file = f"{path}/{filename}_temp.mp4"
             ydl_opts = {
-                'outtmpl': f"{path}/{filename}.%(ext)s",
+                'outtmpl': temp_file,
                 'cookiefile': tmp_cookie_path,
                 'format': 'bestvideo+bestaudio/best',
                 'merge_output_format': 'mp4',
                 'http_headers': {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
                 },
-                # Автоматическое перекодирование для совместимости с iOS
-                'postprocessors': [{
-                    'key': 'FFmpegVideoConvertor',
-                    'preferedformat': 'mp4',
-                }],
-                'postprocessor_args': {
-                    'FFmpegVideoConvertor': [
-                        '-c:v', 'libx264',
-                        '-preset', 'veryfast',
-                        '-crf', '23',
-                        '-profile:v', 'baseline',
-                        '-level', '3.1',
-                        '-pix_fmt', 'yuv420p',
-                        '-c:a', 'aac',
-                        '-b:a', '128k',
-                        '-movflags', '+faststart',
-                    ]
-                },
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([reels_url])
-            logger.info(f"Downloaded and encoded: {path}/{filename}.mp4")
-            return f"{path}/{filename}.mp4"
+            
+            # Шаг 2: Перекодируем для iOS
+            output_file = f"{path}/{filename}.mp4"
+            ffmpeg_cmd = [
+                'ffmpeg', '-i', temp_file,
+                '-c:v', 'libx264',
+                '-preset', 'veryfast',
+                '-crf', '23',
+                '-profile:v', 'baseline',
+                '-level', '3.1',
+                '-pix_fmt', 'yuv420p',
+                '-c:a', 'aac',
+                '-b:a', '128k',
+                '-movflags', '+faststart',
+                '-y',
+                output_file
+            ]
+            logger.info(f"Running ffmpeg: {' '.join(ffmpeg_cmd)}")
+            result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                logger.error(f"FFmpeg error: {result.stderr}")
+                return None
+            
+            # Удаляем временный файл
+            if os.path.isfile(temp_file):
+                os.remove(temp_file)
+            
+            logger.info(f"Downloaded and encoded for iOS: {output_file}")
+            return output_file
+            
         except Exception as e:
             cookies.remove(cookie)
             logger.error(f"Failed with cookie {cookie}: {e}")
+            # Очистка при ошибке
+            temp_file = f"{path}/{filename}_temp.mp4"
+            if os.path.isfile(temp_file):
+                os.remove(temp_file)
         finally:
             if tmp_cookie_path and os.path.exists(tmp_cookie_path):
                 os.remove(tmp_cookie_path)
@@ -945,7 +962,7 @@ if __name__ == "__main__":
         print(res)
     elif choise == 9:
         link = input("Give me the Instagram reel link: ")
-        result = download_instagram_reels_v2(link)
+        result = _download_instagram_reels_sync_v2(link)
         if result:
             print(f"Done! Video saved to: {result}")
         else:
