@@ -828,7 +828,7 @@ if __name__ == "__main__":
         print("Done!")
     elif choise == 4:
         link = input("Give me the link: ")
-        download_instagram_reels(link)
+        _download_instagram_reels_sync(link)
         print("Done!")
     elif choise == 5:
         replace_audio("подъем коленей высоко.mov", "Lou Reed - Perfect Day (Official Audio).mp3")
