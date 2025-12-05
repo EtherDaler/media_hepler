@@ -552,7 +552,11 @@ def reencode_video(path_to_video):
     subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     return output_path
 
-def download_instagram_reels(reels_url):
+def _download_instagram_reels_sync(reels_url):
+    """Синхронная функция скачивания Instagram reels (внутренняя)"""
+    import shutil
+    import tempfile
+    
     path = "./videos/reels"
     os.makedirs(path, exist_ok=True)
     i = reels_url.find("reel")
@@ -566,10 +570,28 @@ def download_instagram_reels(reels_url):
     cookies = ['0', '1', '2']
     while len(cookies) > 0:
         cookie = random.choice(cookies)
+        original_cookie_path = f'./instagram{cookie}.txt'
+        tmp_cookie_path = None
+        
+        # Создаём временную копию файла с куками, чтобы yt-dlp не перезаписал оригинал
+        # Используем shutil.copy2 для точного бинарного копирования
+        try:
+            if not os.path.exists(original_cookie_path):
+                raise FileNotFoundError(f"Cookie file not found: {original_cookie_path}")
+            
+            # Создаём временный файл и копируем туда куки
+            tmp_fd, tmp_cookie_path = tempfile.mkstemp(suffix='.txt')
+            os.close(tmp_fd)
+            shutil.copy2(original_cookie_path, tmp_cookie_path)
+        except FileNotFoundError:
+            logger.warning(f"Cookie file not found: {original_cookie_path}")
+            cookies.remove(cookie)
+            continue
+        
         try:
             ydl_opts = {
-                'outtmpl': f"{path}/{filename}.mp4",  # Имя файла для сохранения
-                'cookiefile': f'./instagram{cookie}.txt',  # Путь к файлу с cookies
+                'outtmpl': f"{path}/{filename}.mp4",
+                'cookiefile': tmp_cookie_path,  # Используем временную копию
                 'format': 'bestvideo+bestaudio/best',
                 'http_headers': {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
@@ -580,9 +602,17 @@ def download_instagram_reels(reels_url):
             return f"{path}/{filename}.mp4"
         except Exception as e:
             cookies.remove(cookie)
-            print(e)
-            print(f"Get another cookie: ./instagram{cookie}.txt")
+            logger.error(f"Failed with cookie {cookie}: {e}")
+        finally:
+            # Удаляем временный файл
+            if tmp_cookie_path and os.path.exists(tmp_cookie_path):
+                os.remove(tmp_cookie_path)
     return None
+
+
+async def download_instagram_reels(reels_url):
+    """Асинхронная функция скачивания Instagram reels"""
+    return await asyncio.to_thread(_download_instagram_reels_sync, reels_url)
 
 
 def format_duration(seconds: int) -> str:

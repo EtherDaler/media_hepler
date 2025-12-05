@@ -458,15 +458,29 @@ async def get_link(message: Message, state: FSMContext) -> None:
         await message.answer("Подождите загружаю reels...")
         await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)
         try:
-            path = worker.download_instagram_reels(link)
+            path = await worker.download_instagram_reels(link)
         except Exception as e:
             logger.error(e)
             filename = None
         if path:
             reencoded_path = worker.reencode_video(path)
-            doc = await message.answer_document(document=FSInputFile(reencoded_path), caption="Ваш reels готов!\n@django_media_helper_bot")
-            await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #reels")
-            if doc:
+            try:
+                doc = await message.answer_document(document=FSInputFile(reencoded_path), caption="Ваш reels готов!\n@django_media_helper_bot")
+                await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #reels")
+            except TelegramEntityTooLarge:
+                logger.info("Обнаружен TelegramEntityTooLarge, переходим к отправке через API")
+                width, height = worker.get_video_resolution_moviepy(reencoded_path)
+                sended = send_video_through_api(message.chat.id, reencoded_path, width, height)
+                if not sended:
+                    await message.answer("Извините, размер файла слишком большой для отправки по Telegram.")
+                    await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #reels, размер файла слишком большой")
+                else:
+                    await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #reels")
+            except Exception as e:
+                logger.error(f"Другая ошибка при отправке: {e}")
+                await message.answer("Извините, произошла неизвестная ошибка при отправке видео.")
+                await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #reels, {e}")
+            finally:
                 if os.path.isfile(reencoded_path):
                     os.remove(reencoded_path)
         else:
