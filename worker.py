@@ -558,6 +558,7 @@ def download_instagram_reels(reels_url):
     i = reels_url.find("reel")
     j = reels_url[i+5:].find('/')
     filename = reels_url[i+5:i+5+j]
+    ind = 0
     while os.path.isfile(f"{path}/{filename}.mp4"):
         filename = filename + f"({ind})"
         ind += 1
