@@ -24,7 +24,7 @@ async def handle_instagram_link(message: Message):
         path = worker.download_instagram_reels(link)
     except Exception as e:
         logger.error(e)
-        filename = None
+        path = None
     if path:
         reencoded_path = worker.reencode_video(path)
         doc = await message.answer_document(document=FSInputFile(reencoded_path), caption="Ваш reels готов!\n@django_media_helper_bot")
