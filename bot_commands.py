@@ -434,7 +434,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
             filename = None    
         if filename:
             try:
-                doc = await message.answer_document(document=FSInputFile(f"./audio/youtube/{filename}"), caption="Ваше аудио готово!\n@django_media_helper_bot")
+                doc = await message.answer_audio(audio=FSInputFile(f"./audio/youtube/{filename}"), caption="Ваше аудио готово!\n@django_media_helper_bot")
                 await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал аудио из #YouTube")
             except TelegramEntityTooLarge:
                 logger.info("Обнаружен TelegramEntityTooLarge, переходим к отправке через API")
@@ -465,7 +465,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
         if path:
             #reencoded_path = worker.reencode_video(path)
             try:
-                doc = await message.answer_document(document=FSInputFile(path), caption="Ваш reels готов!\n@django_media_helper_bot")
+                doc = await message.answer_video(video=FSInputFile(path), caption="Ваш reels готов!\n@django_media_helper_bot")
                 await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #reels")
             except TelegramEntityTooLarge:
                 logger.info("Обнаружен TelegramEntityTooLarge, переходим к отправке через API")
@@ -498,7 +498,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
             logger.error(e)
             filename = None
         if filename:
-            doc = await message.answer_document(document=FSInputFile(f"./videos/pinterest/{filename}.mp4"),
+            doc = await message.answer_video(video=FSInputFile(f"./videos/pinterest/{filename}.mp4"),
                                                 caption="Ваше видео готово!\n@django_media_helper_bot")
             await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #Pinterest")
             if doc:
@@ -521,7 +521,7 @@ async def get_link(message: Message, state: FSMContext) -> None:
             filename = None
         if filename:
             try:
-                doc = await message.answer_document(document=FSInputFile(f"./videos/tiktok/{filename}"),
+                doc = await message.answer_video(video=FSInputFile(f"./videos/tiktok/{filename}"),
                                                     caption="Ваш tiktok готов!\n@django_media_helper_bot")
                 await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #tiktok")
                 if doc:
@@ -564,7 +564,7 @@ async def process_video(message: Message, state: FSMContext) -> None:
         video_path = f"./videos/for_convert/{filename}.{format}"
         filename = await worker.convert_to_audio(video_path, filename=filename)
         # Отправляем извлечённое аудио обратно пользователю
-        doc = await message.answer_document(document=FSInputFile(f"./audio/converted/{filename}"), caption="Вот ваше аудио!\n@django_media_helper_bot")
+        doc = await message.answer_audio(audio=FSInputFile(f"./audio/converted/{filename}"), caption="Вот ваше аудио!\n@django_media_helper_bot")
         await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно извлек аудио #audio_cut")
         if doc:
             if os.path.isfile(f"./audio/converted/{filename}"):
@@ -695,7 +695,7 @@ async def replace_audio_audio(message: Message, state: FSMContext) -> None:
         data = await state.get_data()
         result_path = worker.replace_audio(data.get('video'), data.get('audio'))
         if result_path:
-            await message.answer_document(document=FSInputFile(result_path), caption="Ваше видео готово!\n@django_media_helper_bot")
+            await message.answer_video(video=FSInputFile(result_path), caption="Ваше видео готово!\n@django_media_helper_bot")
             await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно заменил аудио в видео #replace_audio")
             if os.path.isfile(result_path):
                 os.remove(result_path)
@@ -913,7 +913,7 @@ async def handle_download_audio(callback: CallbackQuery, state: FSMContext):
         filename = None    
     if filename:
         try:
-            doc = await callback.message.answer_document(document=FSInputFile(f"./audio/youtube/{filename}"), caption="Ваше аудио готово!\n@django_media_helper_bot")
+            doc = await callback.message.answer_audio(audio=FSInputFile(f"./audio/youtube/{filename}"), caption="Ваше аудио готово!\n@django_media_helper_bot")
             await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')} и успешно скачал аудио из #YouTube")
         except TelegramEntityTooLarge:
             logger.info("Обнаружен TelegramEntityTooLarge, переходим к отправке через API")

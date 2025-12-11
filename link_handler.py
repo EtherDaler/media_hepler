@@ -29,7 +29,7 @@ async def handle_instagram_link(message: Message):
     if path:
         #reencoded_path = worker.reencode_video(path)
         try:
-            await message.answer_document(document=FSInputFile(path), caption="Ваш reels готов!\n@django_media_helper_bot")
+            await message.answer_video(video=FSInputFile(path), caption="Ваш reels готов!\n@django_media_helper_bot")
             await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #reels напрямую")
         except TelegramEntityTooLarge:
             logger.info("Обнаружен TelegramEntityTooLarge, переходим к отправке через API")
@@ -107,7 +107,7 @@ async def handle_tiktok_link(message: Message):
         filename = None
     if filename:
         try:
-            doc = await message.answer_document(document=FSInputFile(f"./videos/tiktok/{filename}"),
+            doc = await message.answer_video(video=FSInputFile(f"./videos/tiktok/{filename}"),
                                                 caption="Ваш tiktok готов!\n@django_media_helper_bot")
             await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #tiktok напрямую")
             if doc:
@@ -136,7 +136,7 @@ async def handle_pinterest_link(message: Message):
         logger.error(e)
         filename = None
     if filename:
-        doc = await message.answer_document(document=FSInputFile(f"./videos/pinterest/{filename}.mp4"),
+        doc = await message.answer_video(video=FSInputFile(f"./videos/pinterest/{filename}.mp4"),
                                             caption="Ваше видео готово!\n@django_media_helper_bot")
         await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #Pinterest напрямую")
         if doc:
