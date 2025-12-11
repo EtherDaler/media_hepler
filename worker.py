@@ -607,7 +607,7 @@ def _download_instagram_reels_sync(reels_url):
                 'cookiefile': tmp_cookie_path,  # Используем временную копию
                 'format': 'bestvideo+bestaudio/best',
                 'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/117.0'
                 }
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -625,7 +625,7 @@ def _download_instagram_reels_sync(reels_url):
 
 async def download_instagram_reels(reels_url):
     """Асинхронная функция скачивания Instagram reels"""
-    return await asyncio.to_thread(_download_instagram_reels_sync_v2, reels_url)
+    return await asyncio.to_thread(_download_instagram_reels_sync, reels_url)
 
 
 def _download_instagram_reels_sync_v2(reels_url):
