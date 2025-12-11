@@ -687,7 +687,7 @@ def _download_instagram_reels_sync_v2(reels_url):
             ffmpeg_cmd = [
                 'ffmpeg', '-i', temp_file,
                 '-c:v', 'libx264',
-                '-preset', 'veryfast',
+                '-preset', 'ultrafast',
                 '-crf', '23',
                 '-profile:v', 'baseline',
                 '-level', '3.1',
