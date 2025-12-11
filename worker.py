@@ -572,9 +572,8 @@ def _download_instagram_reels_sync(reels_url):
     
     path = "./videos/reels"
     os.makedirs(path, exist_ok=True)
-    i = reels_url.find("reel")
-    j = reels_url[i+5:].find('/')
-    filename = reels_url[i+5:i+5+j]
+    match = re.search(r"reel/([^/?]+)", reels_url)
+    filename = match.group(1) if match else "instagram_video"
     ind = 0
     while os.path.isfile(f"{path}/{filename}.mp4"):
         filename = filename + f"({ind})"
