@@ -120,7 +120,7 @@ def compress_video(input_path, output_path, target_size_mb=50):
         return False
     
 
-def get_yt_dlp_conf(path, proxy=None, player_client=["web"], player_js_version='actual'):
+def get_yt_dlp_conf(path, proxy=None, player_client=["web"]):
     """
     Возвращает ydl_opts. Если proxy_url задан — он подставляется (нормализуется).
     """
@@ -133,7 +133,6 @@ def get_yt_dlp_conf(path, proxy=None, player_client=["web"], player_js_version='
         'extractor_args': {
             'youtube': {
                 'player_client': player_client,
-                'player_js_version': player_js_version
             }
         },
         'http_chunk_size': 0,   # отключаем chunked/Range-запросы
