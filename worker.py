@@ -125,7 +125,7 @@ def get_yt_dlp_conf(path, proxy=None, player_client=["web"], player_js_version='
     Возвращает ydl_opts. Если proxy_url задан — он подставляется (нормализуется).
     """
     ydl_opts = {
-        'format': 'bestvideo[height<=1080]+bestaudio/best',
+        'format': 'bestvideo[height<=1080]+bestaudio/bestvideo+bestaudio/best',
         'outtmpl': f'{path}/%(title)s.%(ext)s',
         'noplaylist': True,
         'verbose': False,  # уменьшаем логирование
@@ -523,23 +523,30 @@ def _convert_audio(video, path, out_format, filename):
 
 async def get_audio_from_youtube(link, path="./audio/youtube", out_format="mp3", filename=None):
     audio = None
-    video = await download_from_youtube(link)
     video_path = "./videos/youtube"
-    rev = video[::-1]
-    tmp = rev.find('.')
-    filename = rev[:tmp:-1]
+    
+    video = await download_from_youtube(link)
+    
+    # Проверка на None СРАЗУ после скачивания
     if video is None:
         print("Произошла ошибка при загрузке видео")
         return None
+    
+    # Извлекаем имя файла без расширения
+    rev = video[::-1]
+    tmp = rev.find('.')
+    filename = rev[:tmp:-1]
+    
     os.makedirs(path, exist_ok=True)
     try:
         audio = await convert_to_audio(f"{video_path}/{video}", path, out_format, filename)
     except Exception as e:
         print("Error:", e)
+    finally:
+        # Удаляем видео файл в любом случае
         if os.path.isfile(f"{video_path}/{video}"):
             os.remove(f"{video_path}/{video}")
-    if os.path.isfile(f"{video_path}/{video}"):
-        os.remove(f"{video_path}/{video}")
+    
     return audio
 
 def reencode_video(path_to_video):

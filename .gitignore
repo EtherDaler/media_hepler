@@ -2,6 +2,8 @@ myvenv
 videos
 audio
 .env
+.DS_Store
+__pycache__
 cookies.txt
 instagram.txt
 instagram0.txt
