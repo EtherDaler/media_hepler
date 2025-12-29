@@ -608,12 +608,17 @@ def _download_instagram_reels_sync(reels_url):
         
         try:
             ydl_opts = {
-                'outtmpl': f"{path}/{filename}.mp4",
+                'outtmpl': f"{path}/{filename}.%(ext)s",
                 'cookiefile': tmp_cookie_path,  # Используем временную копию
-                'format': 'bestvideo+bestaudio/best',
+                # Приоритет: лучшее видео (до 1080p) + аудио, иначе лучший комбинированный
+                'format': 'bestvideo[height<=1080]+bestaudio/bestvideo+bestaudio/best',
+                'merge_output_format': 'mp4',  # Гарантируем mp4 на выходе
+                # Сортировка форматов: приоритет качеству и разрешению
+                'format_sort': ['res:1080', 'vcodec:h264', 'acodec:aac'],
                 'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/117.0'
-                }
+                    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
+                },
+                'noplaylist': True,
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([reels_url])
@@ -676,13 +681,15 @@ def _download_instagram_reels_sync_v2(reels_url):
             # Шаг 1: Скачиваем видео
             temp_file = f"{path}/{filename}_temp.mp4"
             ydl_opts = {
-                'outtmpl': temp_file,
+                'outtmpl': f"{path}/{filename}_temp.%(ext)s",
                 'cookiefile': tmp_cookie_path,
-                'format': 'bestvideo+bestaudio/best',
+                'format': 'bestvideo[height<=1080]+bestaudio/bestvideo+bestaudio/best',
                 'merge_output_format': 'mp4',
+                'format_sort': ['res:1080', 'vcodec:h264', 'acodec:aac'],
                 'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
+                    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
                 },
+                'noplaylist': True,
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([reels_url])
