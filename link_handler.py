@@ -56,10 +56,61 @@ async def handle_instagram_link(message: Message):
         await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #reels напрямую")
 
 
+def is_youtube_shorts(url: str) -> bool:
+    """Проверяет, является ли ссылка YouTube Shorts"""
+    return '/shorts/' in url
+
+
+async def handle_youtube_shorts(message: Message):
+    """Обработка YouTube Shorts — сразу скачиваем без выбора качества"""
+    await message.answer("⏳ Загружаю Shorts...")
+    await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)
+    
+    url = message.text
+    username = message.from_user.username
+    user_id = message.from_user.id
+    
+    try:
+        # Скачиваем Shorts как обычное видео
+        video_filename = await worker.download_from_youtube(url)
+        
+        if video_filename:
+            video_path = f"./videos/youtube/{video_filename}"
+            try:
+                await message.answer_video(
+                    video=FSInputFile(video_path),
+                    caption="Ваш Shorts готов!\n@django_media_helper_bot"
+                )
+                await message.bot.send_message(
+                    chat_id=config.DEV_CHANEL_ID,
+                    text=f"Пользователь @{username} (ID: {user_id}) успешно скачал #shorts"
+                )
+            except TelegramEntityTooLarge:
+                await message.answer_document(
+                    document=FSInputFile(video_path),
+                    caption="Ваш Shorts готов!\n@django_media_helper_bot"
+                )
+            finally:
+                if os.path.isfile(video_path):
+                    os.remove(video_path)
+        else:
+            await message.answer("❌ Не удалось скачать Shorts.")
+            
+    except Exception as e:
+        logger.error(f"Ошибка скачивания Shorts: {e}")
+        await message.answer("❌ Произошла ошибка при скачивании Shorts.")
+
+
 async def handle_youtube_link(message: Message, state: FSMContext):
     """Обработка прямой YouTube ссылки"""
-    from bot_commands import YoutubeSearchState
     url = message.text
+    
+    # Если это Shorts — обрабатываем отдельно
+    if is_youtube_shorts(url):
+        await handle_youtube_shorts(message)
+        return
+    
+    from bot_commands import YoutubeSearchState
     
     # Получаем информацию о видео
     try:
