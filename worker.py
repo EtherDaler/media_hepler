@@ -521,8 +521,19 @@ def _convert_audio(video, path, out_format, filename):
     return f"{filename}.{out_format}"
 
 async def get_audio_from_youtube(link, path="./audio/youtube", out_format="mp3", filename=None):
+    """Скачивает видео и конвертирует в аудио с метаданными (автор, название)"""
     audio = None
     video_path = "./videos/youtube"
+    
+    # Сначала получаем информацию о видео для метаданных
+    try:
+        video_info = get_youtube_video_info(link)
+        title = video_info.get('title', 'Unknown')
+        artist = video_info.get('channel', 'Unknown')
+    except Exception as e:
+        logger.warning(f"Could not get video info for metadata: {e}")
+        title = "Unknown"
+        artist = "Unknown"
     
     video = await download_from_youtube(link)
     
@@ -537,14 +548,42 @@ async def get_audio_from_youtube(link, path="./audio/youtube", out_format="mp3",
     filename = rev[:tmp:-1]
     
     os.makedirs(path, exist_ok=True)
+    
+    # Генерируем уникальное имя файла
+    output_filename = filename.strip()
+    ind = 1
+    while os.path.isfile(f"{path}/{output_filename}.{out_format}"):
+        output_filename = f"{filename}({ind})"
+        ind += 1
+    
+    input_file = f"{video_path}/{video}"
+    output_file = f"{path}/{output_filename}.{out_format}"
+    
     try:
-        audio = await convert_to_audio(f"{video_path}/{video}", path, out_format, filename)
+        # Конвертируем через ffmpeg с метаданными
+        ffmpeg_cmd = [
+            'ffmpeg', '-i', input_file,
+            '-vn',  # Без видео
+            '-acodec', 'libmp3lame' if out_format == 'mp3' else 'aac',
+            '-ab', '192k',
+            '-metadata', f'title={title}',
+            '-metadata', f'artist={artist}',
+            '-metadata', 'album=YouTube',
+            '-y',
+            output_file
+        ]
+        result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            audio = f"{output_filename}.{out_format}"
+        else:
+            logger.error(f"FFmpeg error: {result.stderr}")
     except Exception as e:
-        print("Error:", e)
+        logger.error(f"Error converting to audio: {e}")
     finally:
         # Удаляем видео файл в любом случае
-        if os.path.isfile(f"{video_path}/{video}"):
-            os.remove(f"{video_path}/{video}")
+        if os.path.isfile(input_file):
+            os.remove(input_file)
     
     return audio
 
