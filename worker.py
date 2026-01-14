@@ -378,13 +378,7 @@ def search_videos(query, max_results=8):
 def get_video_formats(url: str, max_formats=5):
     """Получение доступных форматов видео"""
     
-    ydl_opts = {
-        'quiet': True,
-        'no_warnings': True,
-        'cookiefile': DEFAULT_YT_COOKIE
-    }
-    
-    try:
+    def extract_formats(ydl_opts):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             
@@ -407,10 +401,33 @@ def get_video_formats(url: str, max_formats=5):
             # Сортируем по качеству и берем топ
             video_formats.sort(key=lambda x: x['quality'], reverse=True)
             return video_formats[:max_formats]
-            
+    
+    # Попытка без прокси
+    ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'cookiefile': DEFAULT_YT_COOKIE
+    }
+    
+    try:
+        return extract_formats(ydl_opts)
     except Exception as e:
-        logger.error(f"Ошибка получения форматов: {e}")
-        return []
+        logger.warning(f"Ошибка получения форматов без прокси: {e}. Пробуем с прокси...")
+    
+    # Fallback: пробуем с прокси
+    try:
+        proxy = get_random_proxy()
+        if proxy:
+            proxy_url = list(proxy.keys())[0]
+            proxy_cookie = proxy[proxy_url]
+            ydl_opts['proxy'] = str(proxy_url).rstrip('/')
+            ydl_opts['cookiefile'] = proxy_cookie
+            ydl_opts['socket_timeout'] = 150
+            return extract_formats(ydl_opts)
+    except Exception as e:
+        logger.error(f"Ошибка получения форматов с прокси: {e}")
+    
+    return []
 
 
 def get_quality_score(format_info):
