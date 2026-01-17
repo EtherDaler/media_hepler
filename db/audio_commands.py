@@ -21,7 +21,8 @@ async def save_audio(
     duration: Optional[int] = None,
     message_id: Optional[int] = None,
     source: Optional[str] = None,
-    source_url: Optional[str] = None
+    source_url: Optional[str] = None,
+    thumbnail_file_id: Optional[str] = None
 ) -> Optional[UserAudio]:
     """Сохранить аудио файл в БД"""
     audio = UserAudio(
@@ -33,7 +34,8 @@ async def save_audio(
         duration=duration,
         message_id=message_id,
         source=source,
-        source_url=source_url
+        source_url=source_url,
+        thumbnail_file_id=thumbnail_file_id
     )
     session.add(audio)
     try:

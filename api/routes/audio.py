@@ -4,6 +4,7 @@ import re
 import httpx
 from typing import Optional, Set
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -26,13 +27,16 @@ router = APIRouter(prefix="/audio", tags=["Audio"])
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 TELEGRAM_FILE_URL = f"https://api.telegram.org/file/bot{BOT_TOKEN}"
 
+# Кеш для обложек (file_id -> url, expires_at)
+_cover_cache: dict = {}
 
-def get_thumbnail_url(source: Optional[str], source_url: Optional[str]) -> Optional[str]:
+
+def get_youtube_thumbnail_url(source_url: Optional[str]) -> Optional[str]:
     """
-    Генерирует URL обложки на основе источника.
-    Для YouTube извлекает video_id и возвращает URL обложки.
+    Генерирует прямой URL обложки YouTube.
+    Используется как fallback в endpoint /cover.
     """
-    if source != 'youtube' or not source_url:
+    if not source_url:
         return None
     
     # Паттерны для извлечения video_id из разных форматов YouTube URL
@@ -45,10 +49,30 @@ def get_thumbnail_url(source: Optional[str], source_url: Optional[str]) -> Optio
         match = re.search(pattern, source_url)
         if match:
             video_id = match.group(1)
-            # Возвращаем URL квадратной обложки (mqdefault - 320x180, обрежется на клиенте)
             return f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg"
     
     return None
+
+
+def get_thumbnail_url(source: Optional[str], source_url: Optional[str]) -> Optional[str]:
+    """Для обратной совместимости"""
+    if source == 'youtube':
+        return get_youtube_thumbnail_url(source_url)
+    return None
+
+
+def has_cover(audio) -> bool:
+    """Проверяет, есть ли у аудио обложка (Telegram или YouTube)"""
+    if audio.thumbnail_file_id:
+        return True
+    if audio.source == 'youtube' and audio.source_url:
+        return get_youtube_thumbnail_url(audio.source_url) is not None
+    return False
+
+
+def build_cover_url(audio_id: int) -> str:
+    """Генерирует URL к endpoint обложки"""
+    return f"/api/audio/{audio_id}/cover"
 
 
 async def get_favorite_audio_ids(db: AsyncSession, user_id: int) -> Set[int]:
@@ -85,7 +109,7 @@ async def list_audio(
             source_url=audio.source_url,
             created_at=audio.created_at,
             is_favorite=audio.id in favorite_ids,
-            thumbnail_url=get_thumbnail_url(audio.source, audio.source_url)
+            thumbnail_url=build_cover_url(audio.id) if has_cover(audio) else None
         )
         for audio in audio_list
     ]
@@ -125,7 +149,7 @@ async def get_audio(
         source_url=audio.source_url,
         created_at=audio.created_at,
         is_favorite=is_fav,
-        thumbnail_url=get_thumbnail_url(audio.source, audio.source_url)
+        thumbnail_url=build_cover_url(audio.id) if has_cover(audio) else None
     )
 
 
@@ -236,4 +260,73 @@ async def refresh_stream_url(
     при обработке истекших URL.
     """
     return await get_stream_url(audio_id, user_id, db)
+
+
+@router.get("/{audio_id}/cover")
+async def get_audio_cover(
+    audio_id: int,
+    user_id: int = Depends(get_user_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Получить обложку аудио.
+    
+    Приоритет:
+    1. thumbnail_file_id из Telegram (если есть)
+    2. YouTube thumbnail (если source='youtube')
+    3. 404
+    
+    Возвращает редирект на URL изображения.
+    """
+    import time
+    
+    audio = await get_audio_by_id(db, audio_id)
+    
+    if not audio:
+        raise HTTPException(status_code=404, detail="Audio not found")
+    
+    if audio.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # 1. Пробуем Telegram thumbnail
+    if audio.thumbnail_file_id:
+        cache_key = audio.thumbnail_file_id
+        now = time.time()
+        
+        # Проверяем кеш (URL валиден ~1 час, кешируем на 50 мин)
+        if cache_key in _cover_cache:
+            cached_url, expires_at = _cover_cache[cache_key]
+            if now < expires_at:
+                return RedirectResponse(url=cached_url, status_code=302)
+        
+        # Получаем новый URL
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{TELEGRAM_API_URL}/getFile",
+                    params={"file_id": audio.thumbnail_file_id},
+                    timeout=10.0
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("ok"):
+                        file_path = data["result"]["file_path"]
+                        cover_url = f"{TELEGRAM_FILE_URL}/{file_path}"
+                        
+                        # Кешируем на 50 минут
+                        _cover_cache[cache_key] = (cover_url, now + 3000)
+                        
+                        return RedirectResponse(url=cover_url, status_code=302)
+        except httpx.RequestError:
+            pass  # Пробуем fallback
+    
+    # 2. Fallback на YouTube thumbnail
+    if audio.source == 'youtube':
+        youtube_url = get_youtube_thumbnail_url(audio.source_url)
+        if youtube_url:
+            return RedirectResponse(url=youtube_url, status_code=302)
+    
+    # 3. Нет обложки
+    raise HTTPException(status_code=404, detail="Cover not found")
 

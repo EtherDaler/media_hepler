@@ -48,6 +48,11 @@ async def save_sent_audio(
         artist = audio.performer
         duration = audio.duration
         
+        # Извлекаем thumbnail_file_id если есть
+        thumbnail_file_id = None
+        if audio.thumbnail:
+            thumbnail_file_id = audio.thumbnail.file_id
+        
         saved = await save_audio(
             session=session,
             user_id=user_id,
@@ -58,7 +63,8 @@ async def save_sent_audio(
             duration=duration,
             message_id=message.message_id,
             source=source,
-            source_url=source_url
+            source_url=source_url,
+            thumbnail_file_id=thumbnail_file_id
         )
         
         if saved:
@@ -111,6 +117,12 @@ async def save_audio_from_api_response(
             logger.info(f"Audio already saved: {file_id}")
             return True
         
+        # Извлекаем thumbnail_file_id из API ответа
+        thumbnail_file_id = None
+        thumbnail_data = audio_data.get('thumbnail') or audio_data.get('thumb')
+        if thumbnail_data:
+            thumbnail_file_id = thumbnail_data.get('file_id')
+        
         saved = await save_audio(
             session=session,
             user_id=user_id,
@@ -121,7 +133,8 @@ async def save_audio_from_api_response(
             duration=audio_data.get('duration'),
             message_id=result.get('message_id'),
             source=source,
-            source_url=source_url
+            source_url=source_url,
+            thumbnail_file_id=thumbnail_file_id
         )
         
         if saved:

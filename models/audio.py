@@ -17,6 +17,7 @@ class UserAudio(Base):
     # Telegram file identifiers
     file_id = Column(String(255), nullable=False)  # Постоянный file_id для бота
     file_unique_id = Column(String(255), nullable=True)  # Уникальный ID файла
+    thumbnail_file_id = Column(String(255), nullable=True)  # file_id обложки (если есть)
     
     # Метаданные трека
     title = Column(String(255), nullable=True)  # Название трека

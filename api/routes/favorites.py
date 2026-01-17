@@ -11,7 +11,7 @@ from api.schemas import (
     ToggleFavoriteResponse,
     AudioResponse
 )
-from api.routes.audio import get_thumbnail_url
+from api.routes.audio import has_cover, build_cover_url
 from db.audio_commands import (
     get_user_favorites,
     add_to_favorites,
@@ -51,7 +51,7 @@ async def list_favorites(
                     source_url=fav.audio.source_url,
                     created_at=fav.audio.created_at,
                     is_favorite=True,
-                    thumbnail_url=get_thumbnail_url(fav.audio.source, fav.audio.source_url)
+                    thumbnail_url=build_cover_url(fav.audio.id) if has_cover(fav.audio) else None
                 ),
                 added_at=fav.added_at
             ))
