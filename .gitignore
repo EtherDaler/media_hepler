@@ -13,3 +13,8 @@ tiktok_cookie.txt
 cookie_wallen.txt
 cookie_weed.txt
 test.py
+
+# Mini App
+mini-app/node_modules
+mini-app/dist
+mini-app/.vite

@@ -30,7 +30,7 @@ async def handle_instagram_link(message: Message):
         #reencoded_path = worker.reencode_video(path)
         try:
             await message.answer_video(video=FSInputFile(path), caption="Ваш reels готов!\n@django_media_helper_bot")
-            await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #reels напрямую")
+        await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #reels напрямую")
         except TelegramEntityTooLarge:
             logger.info("Обнаружен TelegramEntityTooLarge, переходим к отправке через API")
             # Локальный импорт чтобы избежать циклического импорта
