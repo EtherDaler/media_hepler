@@ -31,26 +31,33 @@ def validate_telegram_init_data(init_data: str, bot_token: str) -> dict:
     try:
         parsed = dict(parse_qsl(init_data, keep_blank_values=True))
         
+        print(f"DEBUG: parsed keys: {list(parsed.keys())}")
+        
         if 'hash' not in parsed:
             raise ValueError("Missing hash")
         
         received_hash = parsed.pop('hash')
+        print(f"DEBUG: received_hash: {received_hash[:20]}...")
         
         # Сортируем ключи и формируем data-check-string
         data_check_string = '\n'.join(
             f"{k}={v}" for k, v in sorted(parsed.items())
         )
+        print(f"DEBUG: data_check_string: {data_check_string[:100]}...")
         
         # Вычисляем secret_key = HMAC-SHA256(bot_token, "WebAppData")
+        # ВАЖНО: ключ - "WebAppData", сообщение - bot_token
         secret_key = hmac.new(
-            bot_token.encode(),  # key
-            b"WebAppData",       # message
+            b"WebAppData",        # key
+            bot_token.encode(),   # message
             hashlib.sha256
         ).digest()
+        print(f"DEBUG: bot_token starts with: {bot_token[:10]}...")
         
         # Проверяем auth_date (не старше 24 часов)
         import time
         auth_date = int(parsed.get('auth_date', 0))
+        print(f"DEBUG: auth_date: {auth_date}, now: {int(time.time())}, diff: {int(time.time()) - auth_date}s")
         if time.time() - auth_date > 86400:
             raise ValueError("Auth data expired")
         
@@ -60,6 +67,9 @@ def validate_telegram_init_data(init_data: str, bot_token: str) -> dict:
             data_check_string.encode(),
             hashlib.sha256
         ).hexdigest()
+        
+        print(f"DEBUG: calculated_hash: {calculated_hash[:20]}...")
+        print(f"DEBUG: hashes match: {calculated_hash == received_hash}")
         
         if not hmac.compare_digest(calculated_hash, received_hash):
             raise ValueError("Invalid hash")
