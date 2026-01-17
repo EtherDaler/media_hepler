@@ -37,6 +37,15 @@ export const usePlayerStore = defineStore('player', () => {
     return queueIndex.value > 0
   })
 
+  // Треки которые будут играть после текущего
+  const upcomingTracks = computed(() => {
+    if (queueIndex.value >= queue.value.length - 1) return []
+    return queue.value.slice(queueIndex.value + 1)
+  })
+
+  // Количество треков в очереди после текущего
+  const upcomingCount = computed(() => upcomingTracks.value.length)
+
   const formattedTime = computed(() => formatTime(currentTime.value))
   const formattedDuration = computed(() => formatTime(duration.value))
 
@@ -296,8 +305,64 @@ export const usePlayerStore = defineStore('player', () => {
     playNext()
   }
 
+  // Добавить трек в конец очереди
   function addToQueue(track) {
-    queue.value.push(track)
+    // Проверяем что трек ещё не в очереди
+    const exists = queue.value.some(t => t.id === track.id)
+    if (!exists) {
+      queue.value.push(track)
+    }
+  }
+
+  // Добавить трек следующим (после текущего)
+  function addToQueueNext(track) {
+    // Проверяем что трек ещё не в очереди
+    const existingIndex = queue.value.findIndex(t => t.id === track.id)
+    if (existingIndex !== -1) {
+      // Если трек уже в очереди, перемещаем его
+      queue.value.splice(existingIndex, 1)
+      if (existingIndex <= queueIndex.value) {
+        queueIndex.value--
+      }
+    }
+    // Вставляем после текущего трека
+    queue.value.splice(queueIndex.value + 1, 0, track)
+  }
+
+  // Удалить трек из очереди по индексу
+  function removeFromQueue(index) {
+    if (index < 0 || index >= queue.value.length) return
+    if (index === queueIndex.value) return // Нельзя удалить текущий трек
+    
+    queue.value.splice(index, 1)
+    
+    // Корректируем индекс если удалили трек до текущего
+    if (index < queueIndex.value) {
+      queueIndex.value--
+    }
+  }
+
+  // Переместить трек в очереди
+  function moveInQueue(fromIndex, toIndex) {
+    if (fromIndex === toIndex) return
+    if (fromIndex === queueIndex.value || toIndex === queueIndex.value) return // Не перемещаем текущий
+    
+    const [track] = queue.value.splice(fromIndex, 1)
+    queue.value.splice(toIndex, 0, track)
+    
+    // Корректируем индекс текущего трека
+    if (fromIndex < queueIndex.value && toIndex >= queueIndex.value) {
+      queueIndex.value--
+    } else if (fromIndex > queueIndex.value && toIndex <= queueIndex.value) {
+      queueIndex.value++
+    }
+  }
+
+  // Воспроизвести трек из очереди по индексу
+  function playFromQueue(index) {
+    if (index < 0 || index >= queue.value.length) return
+    queueIndex.value = index
+    playTrackFromQueue(queue.value[index])
   }
 
   function clearQueue() {
@@ -325,6 +390,8 @@ export const usePlayerStore = defineStore('player', () => {
     hasPrev,
     formattedTime,
     formattedDuration,
+    upcomingTracks,
+    upcomingCount,
     
     // Actions
     playTrack,
@@ -340,6 +407,10 @@ export const usePlayerStore = defineStore('player', () => {
     toggleRepeat,
     toggleShuffle,
     addToQueue,
+    addToQueueNext,
+    removeFromQueue,
+    moveInQueue,
+    playFromQueue,
     clearQueue
   }
 })

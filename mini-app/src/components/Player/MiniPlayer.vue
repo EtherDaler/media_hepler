@@ -23,11 +23,11 @@
       <!-- Controls -->
       <div class="controls" @click.stop>
         <button 
-          class="control-btn favorite-btn"
-          :class="{ active: currentTrack.is_favorite }"
-          @click="toggleFavorite"
+          class="control-btn nav-btn"
+          @click="playerStore.playPrev()"
+          :disabled="!playerStore.hasPrev && playerStore.repeatMode !== 'all'"
         >
-          <IconHeart :filled="currentTrack.is_favorite" />
+          <IconPrev />
         </button>
         
         <button 
@@ -39,6 +39,14 @@
           <IconPause v-else-if="playerStore.isPlaying" />
           <IconPlay v-else />
         </button>
+
+        <button 
+          class="control-btn nav-btn"
+          @click="playerStore.playNext()"
+          :disabled="!playerStore.hasNext && playerStore.repeatMode !== 'all'"
+        >
+          <IconNext />
+        </button>
       </div>
     </div>
   </div>
@@ -47,30 +55,20 @@
 <script setup>
 import { computed } from 'vue'
 import { usePlayerStore } from '../../stores/playerStore'
-import { api } from '../../api/client'
 import IconMusic from '../Common/icons/IconMusic.vue'
 import IconPlay from '../Common/icons/IconPlay.vue'
 import IconPause from '../Common/icons/IconPause.vue'
-import IconHeart from '../Common/icons/IconHeart.vue'
+import IconPrev from '../Common/icons/IconPrev.vue'
+import IconNext from '../Common/icons/IconNext.vue'
+
+const emit = defineEmits(['open-full'])
 
 const playerStore = usePlayerStore()
 
 const currentTrack = computed(() => playerStore.currentTrack)
 
-async function toggleFavorite() {
-  if (!currentTrack.value) return
-  
-  try {
-    const result = await api.toggleFavorite(currentTrack.value.id)
-    currentTrack.value.is_favorite = result.is_favorite
-  } catch (error) {
-    console.error('Failed to toggle favorite:', error)
-  }
-}
-
 function openFullPlayer() {
-  // TODO: Открыть полноэкранный плеер
-  console.log('Open full player')
+  emit('open-full')
 }
 </script>
 
@@ -184,17 +182,17 @@ function openFullPlayer() {
   transform: scale(0.9);
 }
 
-.favorite-btn {
+.nav-btn {
   color: var(--text-secondary);
 }
 
-.favorite-btn.active {
-  color: var(--accent);
+.nav-btn:disabled {
+  opacity: 0.3;
 }
 
-.favorite-btn svg {
-  width: 22px;
-  height: 22px;
+.nav-btn svg {
+  width: 20px;
+  height: 20px;
 }
 
 .play-btn {

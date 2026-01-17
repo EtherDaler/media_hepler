@@ -46,15 +46,48 @@
       >
         <IconHeart :filled="track.is_favorite" />
       </button>
+      <button class="action-btn menu-btn" @click="showMenu = true">
+        <IconMore />
+      </button>
     </div>
+
+    <!-- Context Menu -->
+    <Teleport to="body">
+      <div v-if="showMenu" class="menu-overlay" @click="showMenu = false">
+        <div class="menu" @click.stop>
+          <button class="menu-item" @click="addToQueueNext">
+            <IconNext />
+            <span>Воспроизвести следующим</span>
+          </button>
+          <button class="menu-item" @click="addToQueue">
+            <IconQueue />
+            <span>Добавить в очередь</span>
+          </button>
+          <button 
+            class="menu-item"
+            :class="{ active: track.is_favorite }"
+            @click="toggleFavorite"
+          >
+            <IconHeart :filled="track.is_favorite" />
+            <span>{{ track.is_favorite ? 'Удалить из избранного' : 'В избранное' }}</span>
+          </button>
+          <button class="menu-item cancel" @click="showMenu = false">
+            <span>Отмена</span>
+          </button>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { usePlayerStore } from '../../stores/playerStore'
 import IconMusic from '../Common/icons/IconMusic.vue'
 import IconHeart from '../Common/icons/IconHeart.vue'
+import IconMore from '../Common/icons/IconMore.vue'
+import IconNext from '../Common/icons/IconNext.vue'
+import IconQueue from '../Common/icons/IconQueue.vue'
 
 const props = defineProps({
   track: {
@@ -78,6 +111,7 @@ const props = defineProps({
 const emit = defineEmits(['toggleFavorite'])
 
 const playerStore = usePlayerStore()
+const showMenu = ref(false)
 
 const isPlaying = computed(() => 
   playerStore.currentTrack?.id === props.track.id && playerStore.isPlaying
@@ -96,6 +130,21 @@ function formatDuration(seconds) {
 
 function handleClick() {
   playerStore.playTrack(props.track, props.tracklist)
+}
+
+function addToQueue() {
+  playerStore.addToQueue(props.track)
+  showMenu.value = false
+}
+
+function addToQueueNext() {
+  playerStore.addToQueueNext(props.track)
+  showMenu.value = false
+}
+
+function toggleFavorite() {
+  emit('toggleFavorite', props.track)
+  showMenu.value = false
 }
 </script>
 
@@ -263,6 +312,63 @@ function handleClick() {
 .action-btn svg {
   width: 18px;
   height: 18px;
+}
+
+.menu-btn {
+  opacity: 0.5;
+}
+
+.track-item:hover .menu-btn {
+  opacity: 1;
+}
+
+/* Context Menu */
+.menu-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: flex-end;
+  z-index: 200;
+}
+
+.menu {
+  background: var(--bg-elevated);
+  width: 100%;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  padding: var(--spacing-md);
+  padding-bottom: calc(var(--spacing-md) + env(safe-area-inset-bottom));
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  width: 100%;
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--font-size-md);
+}
+
+.menu-item:active {
+  background: var(--bg-highlight);
+}
+
+.menu-item.active {
+  color: var(--accent);
+}
+
+.menu-item.cancel {
+  justify-content: center;
+  color: var(--text-secondary);
+  margin-top: var(--spacing-sm);
+}
+
+.menu-item svg {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
 }
 </style>
 
