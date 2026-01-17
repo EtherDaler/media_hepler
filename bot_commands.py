@@ -780,6 +780,54 @@ async def process_answer(message: Message, state: FSMContext) -> None:
     await state.clear()
 
 
+@router.message(Command("cancel"))
+@router.message(F.text.casefold() == "отмена")
+async def cancel_handler(message: Message, state: FSMContext):
+    """Отмена текущего действия с очисткой состояния"""
+    current_state = await state.get_state()
+    if current_state is None:
+        return
+    
+    await state.clear()
+    await message.answer("Действие отменено. Начните заново с /start", reply_markup=None)
+
+
+@router.message(Command("reset"))
+async def reset_handler(message: Message, state: FSMContext):
+    """Полный сброс состояния"""
+    await state.clear()
+    await message.answer("✅ Состояние сброшено. Начните новый поиск.")
+
+
+# ============================================
+# Синхронизация аудио для Mini App
+# ============================================
+
+@router.message(Command("sync"))
+async def sync_audio_handler(message: Message, session: AsyncSession):
+    """
+    Команда для синхронизации аудио с Mini App.
+    Показывает инструкцию по синхронизации.
+    """
+    keyboard = [
+        [InlineKeyboardButton(text="📱 Открыть плеер", web_app={"url": config.MINI_APP_URL})]
+    ] if hasattr(config, 'MINI_APP_URL') and config.MINI_APP_URL else []
+    
+    reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard) if keyboard else None
+    
+    await message.answer(
+        "🔄 **Синхронизация аудио с плеером**\n\n"
+        "Чтобы добавить ваши существующие аудио в плеер Mini App:\n\n"
+        "1️⃣ Перейдите в чат со мной\n"
+        "2️⃣ Найдите аудио, которые хотите добавить\n"
+        "3️⃣ **Перешлите** их мне (Forward)\n\n"
+        "Я автоматически добавлю каждый трек в вашу библиотеку.\n\n"
+        "💡 Можно пересылать несколько аудио за раз!",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+
+
 @router.message(F.text)
 async def handle_search_query(message: Message, state: FSMContext):
     """Обработка поискового запроса"""
@@ -1167,53 +1215,6 @@ async def handle_back_to_actions(callback: CallbackQuery, state: FSMContext):
     await state.set_state(YoutubeSearchState.select_action)
     await callback.answer()
 
-
-@router.message(Command("cancel"))
-@router.message(F.text.casefold() == "отмена")
-async def cancel_handler(message: Message, state: FSMContext):
-    """Отмена текущего действия с очисткой состояния"""
-    current_state = await state.get_state()
-    if current_state is None:
-        return
-    
-    await state.clear()
-    await message.answer("Действие отменено. Начните заново с /start", reply_markup=None)
-
-
-@router.message(Command("reset"))
-async def reset_handler(message: Message, state: FSMContext):
-    """Полный сброс состояния"""
-    await state.clear()
-    await message.answer("✅ Состояние сброшено. Начните новый поиск.")
-
-
-# ============================================
-# Синхронизация аудио для Mini App
-# ============================================
-
-@router.message(Command("sync"))
-async def sync_audio_handler(message: Message, session: AsyncSession):
-    """
-    Команда для синхронизации аудио с Mini App.
-    Показывает инструкцию по синхронизации.
-    """
-    keyboard = [
-        [InlineKeyboardButton(text="📱 Открыть плеер", web_app={"url": config.MINI_APP_URL})]
-    ] if hasattr(config, 'MINI_APP_URL') and config.MINI_APP_URL else []
-    
-    reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard) if keyboard else None
-    
-    await message.answer(
-        "🔄 **Синхронизация аудио с плеером**\n\n"
-        "Чтобы добавить ваши существующие аудио в плеер Mini App:\n\n"
-        "1️⃣ Перейдите в чат со мной\n"
-        "2️⃣ Найдите аудио, которые хотите добавить\n"
-        "3️⃣ **Перешлите** их мне (Forward)\n\n"
-        "Я автоматически добавлю каждый трек в вашу библиотеку.\n\n"
-        "💡 Можно пересылать несколько аудио за раз!",
-        reply_markup=reply_markup,
-        parse_mode='Markdown'
-    )
 
 
 @router.message(F.audio)
