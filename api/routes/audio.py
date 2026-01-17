@@ -61,18 +61,25 @@ def get_thumbnail_url(source: Optional[str], source_url: Optional[str]) -> Optio
     return None
 
 
-def has_cover(audio) -> bool:
-    """Проверяет, есть ли у аудио обложка (Telegram или YouTube)"""
-    if audio.thumbnail_file_id:
-        return True
+def get_cover_url_for_audio(audio) -> Optional[str]:
+    """
+    Возвращает URL обложки для аудио.
+    
+    - Для YouTube: прямой URL на img.youtube.com (не требует авторизации)
+    - Для Telegram thumbnail: /api/audio/{id}/cover (требует авторизацию)
+    """
+    # Приоритет 1: YouTube — прямой URL (работает в <img> без авторизации)
     if audio.source == 'youtube' and audio.source_url:
-        return get_youtube_thumbnail_url(audio.source_url) is not None
-    return False
-
-
-def build_cover_url(audio_id: int) -> str:
-    """Генерирует URL к endpoint обложки"""
-    return f"/api/audio/{audio_id}/cover"
+        youtube_url = get_youtube_thumbnail_url(audio.source_url)
+        if youtube_url:
+            return youtube_url
+    
+    # Приоритет 2: Telegram thumbnail — через endpoint
+    # Примечание: этот URL требует авторизацию, работает только через fetch с headers
+    if audio.thumbnail_file_id:
+        return f"/api/audio/{audio.id}/cover"
+    
+    return None
 
 
 async def get_favorite_audio_ids(db: AsyncSession, user_id: int) -> Set[int]:
@@ -109,7 +116,7 @@ async def list_audio(
             source_url=audio.source_url,
             created_at=audio.created_at,
             is_favorite=audio.id in favorite_ids,
-            thumbnail_url=build_cover_url(audio.id) if has_cover(audio) else None
+            thumbnail_url=get_cover_url_for_audio(audio)
         )
         for audio in audio_list
     ]
@@ -149,7 +156,7 @@ async def get_audio(
         source_url=audio.source_url,
         created_at=audio.created_at,
         is_favorite=is_fav,
-        thumbnail_url=build_cover_url(audio.id) if has_cover(audio) else None
+        thumbnail_url=get_cover_url_for_audio(audio)
     )
 
 
