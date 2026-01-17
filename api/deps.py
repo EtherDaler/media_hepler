@@ -81,12 +81,19 @@ async def get_current_user(
     Получить текущего пользователя из Telegram initData.
     Для разработки можно использовать X-Dev-User-Id заголовок.
     """
+    print(f"=== AUTH DEBUG ===")
+    print(f"initData present: {x_telegram_init_data is not None}")
+    if x_telegram_init_data:
+        print(f"initData starts with: {x_telegram_init_data[:50]}...")
+    
     if not x_telegram_init_data:
+        print("ERROR: No initData header")
         raise HTTPException(status_code=401, detail="Missing authorization")
     
     # Для разработки: если строка начинается с "dev:", используем test user
     if x_telegram_init_data.startswith("dev:"):
         user_id = int(x_telegram_init_data.split(":")[1])
+        print(f"DEV MODE: user_id={user_id}")
         return {
             "id": user_id,
             "first_name": "Developer",
@@ -94,12 +101,16 @@ async def get_current_user(
         }
     
     try:
+        print(f"Validating Telegram initData...")
         data = validate_telegram_init_data(x_telegram_init_data, BOT_TOKEN)
         user = data.get('user', {})
+        print(f"Validation OK! User: {user}")
         if not user or 'id' not in user:
+            print("ERROR: No user in parsed data")
             raise HTTPException(status_code=401, detail="Invalid user data")
         return user
     except ValueError as e:
+        print(f"ERROR: Validation failed - {e}")
         raise HTTPException(status_code=401, detail=str(e))
 
 
