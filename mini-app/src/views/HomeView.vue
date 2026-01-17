@@ -2,7 +2,7 @@
   <div class="home-view">
     <!-- Header -->
     <header class="header">
-      <h1 class="title">Добрый день</h1>
+      <h1 class="title">Media Helper</h1>
     </header>
 
     <!-- Stats -->
