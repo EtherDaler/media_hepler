@@ -157,12 +157,23 @@ export const usePlayerStore = defineStore('player', () => {
   function updateMediaSessionMetadata(track) {
     if (!('mediaSession' in navigator) || !track) return
 
+    // Создаём SVG как Data URL для обложки (некоторые системы требуют artwork)
+    const defaultArtwork = 'data:image/svg+xml,' + encodeURIComponent(`
+      <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+        <rect width="512" height="512" fill="#1a1a2e"/>
+        <circle cx="256" cy="256" r="120" fill="none" stroke="#4a4a6a" stroke-width="8"/>
+        <circle cx="256" cy="256" r="40" fill="#4a4a6a"/>
+        <path d="M220 180 L320 256 L220 332 Z" fill="#6366f1"/>
+      </svg>
+    `.trim())
+
     navigator.mediaSession.metadata = new MediaMetadata({
       title: track.title || 'Unknown',
       artist: track.artist || 'Unknown Artist',
-      album: track.album || '',
-      // Можно добавить artwork если будет
-      artwork: []
+      album: track.album || 'Media Helper',
+      artwork: [
+        { src: defaultArtwork, sizes: '512x512', type: 'image/svg+xml' }
+      ]
     })
   }
 

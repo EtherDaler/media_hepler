@@ -1,7 +1,9 @@
 <template>
   <div class="full-player">
-    <!-- Header -->
-    <header class="header">
+    <!-- Scrollable Content -->
+    <div class="player-scroll-container">
+      <!-- Header -->
+      <header class="header">
       <button class="close-btn" @click="$emit('close')">
         <IconChevron class="chevron-down" />
       </button>
@@ -107,24 +109,28 @@
         <IconShare />
       </button>
     </div>
+    </div><!-- End of player-scroll-container -->
 
     <!-- Menu -->
     <Teleport to="body">
-      <div v-if="showMenu" class="menu-overlay" @click="showMenu = false">
-        <div class="menu" @click.stop>
-          <button class="menu-item" @click="addToQueueNext">
-            <IconNext />
-            <span>Воспроизвести следующим</span>
-          </button>
-          <button class="menu-item" @click="goToQueue">
-            <IconQueue />
-            <span>Очередь воспроизведения</span>
-          </button>
-          <button class="menu-item cancel" @click="showMenu = false">
-            <span>Отмена</span>
-          </button>
+      <Transition name="menu">
+        <div v-if="showMenu" class="menu-overlay" @click="showMenu = false">
+          <div class="menu" @click.stop>
+            <div class="menu-handle"></div>
+            <button class="menu-item" @click="addToQueueNext">
+              <IconNext />
+              <span>Воспроизвести следующим</span>
+            </button>
+            <button class="menu-item" @click="goToQueue">
+              <IconQueue />
+              <span>Очередь воспроизведения</span>
+            </button>
+            <button class="menu-item cancel" @click="showMenu = false">
+              <span>Отмена</span>
+            </button>
+          </div>
         </div>
-      </div>
+      </Transition>
     </Teleport>
   </div>
 </template>
@@ -264,8 +270,18 @@ function goToQueue() {
   z-index: 150;
   display: flex;
   flex-direction: column;
+}
+
+.player-scroll-container {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
   padding: var(--spacing-md);
+  padding-top: calc(var(--spacing-md) + env(safe-area-inset-top));
   padding-bottom: calc(var(--spacing-lg) + env(safe-area-inset-bottom));
+  -webkit-overflow-scrolling: touch;
 }
 
 .header {
@@ -273,6 +289,7 @@ function goToQueue() {
   align-items: center;
   justify-content: space-between;
   padding: var(--spacing-sm) 0;
+  flex-shrink: 0;
 }
 
 .close-btn,
@@ -308,6 +325,7 @@ function goToQueue() {
   align-items: center;
   justify-content: center;
   padding: var(--spacing-lg);
+  min-height: 200px;
 }
 
 .cover-art {
@@ -527,14 +545,25 @@ function goToQueue() {
   display: flex;
   align-items: flex-end;
   z-index: 200;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .menu {
   background: var(--bg-elevated);
   width: 100%;
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  padding: var(--spacing-md);
-  padding-bottom: calc(var(--spacing-md) + env(safe-area-inset-bottom));
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  padding: var(--spacing-sm) var(--spacing-md) var(--spacing-md);
+  padding-bottom: calc(var(--spacing-lg) + env(safe-area-inset-bottom));
+}
+
+.menu-handle {
+  width: 36px;
+  height: 4px;
+  background: var(--text-muted);
+  border-radius: 2px;
+  margin: 0 auto var(--spacing-md);
+  opacity: 0.5;
 }
 
 .menu-item {
@@ -546,6 +575,7 @@ function goToQueue() {
   border-radius: var(--radius-md);
   color: var(--text-primary);
   font-size: var(--font-size-md);
+  transition: background var(--transition-fast);
 }
 
 .menu-item:active {
@@ -556,12 +586,37 @@ function goToQueue() {
   justify-content: center;
   color: var(--text-secondary);
   margin-top: var(--spacing-sm);
+  border-top: 1px solid var(--bg-highlight);
+  padding-top: var(--spacing-lg);
 }
 
 .menu-item svg {
   width: 22px;
   height: 22px;
   flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+/* Menu Animation */
+.menu-enter-active,
+.menu-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.menu-enter-active .menu,
+.menu-leave-active .menu {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.menu-enter-from,
+.menu-leave-to {
+  background: rgba(0, 0, 0, 0);
+  backdrop-filter: blur(0);
+}
+
+.menu-enter-from .menu,
+.menu-leave-to .menu {
+  transform: translateY(100%);
 }
 </style>
 

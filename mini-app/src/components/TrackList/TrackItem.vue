@@ -53,29 +53,42 @@
 
     <!-- Context Menu -->
     <Teleport to="body">
-      <div v-if="showMenu" class="menu-overlay" @click="showMenu = false">
-        <div class="menu" @click.stop>
-          <button class="menu-item" @click="addToQueueNext">
-            <IconNext />
-            <span>Воспроизвести следующим</span>
-          </button>
-          <button class="menu-item" @click="addToQueue">
-            <IconQueue />
-            <span>Добавить в очередь</span>
-          </button>
-          <button 
-            class="menu-item"
-            :class="{ active: track.is_favorite }"
-            @click="toggleFavorite"
-          >
-            <IconHeart :filled="track.is_favorite" />
-            <span>{{ track.is_favorite ? 'Удалить из избранного' : 'В избранное' }}</span>
-          </button>
-          <button class="menu-item cancel" @click="showMenu = false">
-            <span>Отмена</span>
-          </button>
+      <Transition name="menu">
+        <div v-if="showMenu" class="menu-overlay" @click="showMenu = false">
+          <div class="menu" @click.stop>
+            <div class="menu-handle"></div>
+            <div class="menu-track-info">
+              <div class="menu-track-cover">
+                <IconMusic />
+              </div>
+              <div class="menu-track-meta">
+                <span class="menu-track-title">{{ track.title || 'Unknown' }}</span>
+                <span class="menu-track-artist">{{ track.artist || 'Unknown Artist' }}</span>
+              </div>
+            </div>
+            <div class="menu-divider"></div>
+            <button class="menu-item" @click="addToQueueNext">
+              <IconNext />
+              <span>Воспроизвести следующим</span>
+            </button>
+            <button class="menu-item" @click="addToQueue">
+              <IconQueue />
+              <span>Добавить в очередь</span>
+            </button>
+            <button 
+              class="menu-item"
+              :class="{ active: track.is_favorite }"
+              @click="toggleFavorite"
+            >
+              <IconHeart :filled="track.is_favorite" />
+              <span>{{ track.is_favorite ? 'Удалить из избранного' : 'В избранное' }}</span>
+            </button>
+            <button class="menu-item cancel" @click="showMenu = false">
+              <span>Отмена</span>
+            </button>
+          </div>
         </div>
-      </div>
+      </Transition>
     </Teleport>
   </div>
 </template>
@@ -330,14 +343,78 @@ function toggleFavorite() {
   display: flex;
   align-items: flex-end;
   z-index: 200;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .menu {
   background: var(--bg-elevated);
   width: 100%;
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  padding: var(--spacing-md);
-  padding-bottom: calc(var(--spacing-md) + env(safe-area-inset-bottom));
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  padding: var(--spacing-sm) var(--spacing-md) var(--spacing-md);
+  padding-bottom: calc(var(--spacing-lg) + env(safe-area-inset-bottom));
+}
+
+.menu-handle {
+  width: 36px;
+  height: 4px;
+  background: var(--text-muted);
+  border-radius: 2px;
+  margin: 0 auto var(--spacing-md);
+  opacity: 0.5;
+}
+
+.menu-track-info {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.menu-track-cover {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-highlight);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.menu-track-cover svg {
+  width: 24px;
+  height: 24px;
+}
+
+.menu-track-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.menu-track-title {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.menu-track-artist {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.menu-divider {
+  height: 1px;
+  background: var(--bg-highlight);
+  margin: var(--spacing-sm) 0;
 }
 
 .menu-item {
@@ -349,6 +426,7 @@ function toggleFavorite() {
   border-radius: var(--radius-md);
   color: var(--text-primary);
   font-size: var(--font-size-md);
+  transition: background var(--transition-fast);
 }
 
 .menu-item:active {
@@ -363,12 +441,41 @@ function toggleFavorite() {
   justify-content: center;
   color: var(--text-secondary);
   margin-top: var(--spacing-sm);
+  border-top: 1px solid var(--bg-highlight);
+  padding-top: var(--spacing-lg);
 }
 
 .menu-item svg {
   width: 22px;
   height: 22px;
   flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.menu-item.active svg {
+  color: var(--accent);
+}
+
+/* Menu Animation */
+.menu-enter-active,
+.menu-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.menu-enter-active .menu,
+.menu-leave-active .menu {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.menu-enter-from,
+.menu-leave-to {
+  background: rgba(0, 0, 0, 0);
+  backdrop-filter: blur(0);
+}
+
+.menu-enter-from .menu,
+.menu-leave-to .menu {
+  transform: translateY(100%);
 }
 </style>
 
