@@ -66,10 +66,15 @@ export const usePlayerStore = defineStore('player', () => {
 
     audio.addEventListener('loadedmetadata', () => {
       duration.value = audio.duration
+      updateMediaSessionPosition()
     })
 
     audio.addEventListener('timeupdate', () => {
       currentTime.value = audio.currentTime
+      // Обновляем позицию каждые 5 секунд для экономии ресурсов
+      if (Math.floor(currentTime.value) % 5 === 0) {
+        updateMediaSessionPosition()
+      }
     })
 
     audio.addEventListener('ended', () => {
@@ -79,10 +84,12 @@ export const usePlayerStore = defineStore('player', () => {
     audio.addEventListener('playing', () => {
       isPlaying.value = true
       isLoading.value = false
+      updateMediaSessionPlaybackState()
     })
 
     audio.addEventListener('pause', () => {
       isPlaying.value = false
+      updateMediaSessionPlaybackState()
     })
 
     audio.addEventListener('waiting', () => {
@@ -101,7 +108,84 @@ export const usePlayerStore = defineStore('player', () => {
       }
     })
 
+    // Setup Media Session API for lock screen controls
+    setupMediaSession()
+
     return audio
+  }
+
+  // Media Session API - для кнопок на экране блокировки
+  function setupMediaSession() {
+    if (!('mediaSession' in navigator)) return
+
+    navigator.mediaSession.setActionHandler('play', () => {
+      audio?.play()
+    })
+
+    navigator.mediaSession.setActionHandler('pause', () => {
+      audio?.pause()
+    })
+
+    navigator.mediaSession.setActionHandler('previoustrack', () => {
+      playPrev()
+    })
+
+    navigator.mediaSession.setActionHandler('nexttrack', () => {
+      playNext()
+    })
+
+    navigator.mediaSession.setActionHandler('seekto', (details) => {
+      if (audio && details.seekTime !== undefined) {
+        audio.currentTime = details.seekTime
+      }
+    })
+
+    navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+      if (audio) {
+        audio.currentTime = Math.max(0, audio.currentTime - (details.seekOffset || 10))
+      }
+    })
+
+    navigator.mediaSession.setActionHandler('seekforward', (details) => {
+      if (audio) {
+        audio.currentTime = Math.min(audio.duration, audio.currentTime + (details.seekOffset || 10))
+      }
+    })
+  }
+
+  // Обновить метаданные Media Session
+  function updateMediaSessionMetadata(track) {
+    if (!('mediaSession' in navigator) || !track) return
+
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: track.title || 'Unknown',
+      artist: track.artist || 'Unknown Artist',
+      album: track.album || '',
+      // Можно добавить artwork если будет
+      artwork: []
+    })
+  }
+
+  // Обновить состояние воспроизведения в Media Session
+  function updateMediaSessionPlaybackState() {
+    if (!('mediaSession' in navigator)) return
+    
+    navigator.mediaSession.playbackState = isPlaying.value ? 'playing' : 'paused'
+  }
+
+  // Обновить позицию в Media Session
+  function updateMediaSessionPosition() {
+    if (!('mediaSession' in navigator) || !audio) return
+    
+    try {
+      navigator.mediaSession.setPositionState({
+        duration: duration.value || 0,
+        playbackRate: audio.playbackRate || 1,
+        position: currentTime.value || 0
+      })
+    } catch (e) {
+      // Игнорируем ошибки (может быть если duration = 0)
+    }
   }
 
   // Get stream URL
@@ -171,6 +255,9 @@ export const usePlayerStore = defineStore('player', () => {
     isLoading.value = true
     currentTime.value = 0
     duration.value = 0
+
+    // Обновляем метаданные на экране блокировки
+    updateMediaSessionMetadata(track)
 
     try {
       const url = await getStreamUrl(track.id)
@@ -247,6 +334,9 @@ export const usePlayerStore = defineStore('player', () => {
     isLoading.value = true
     currentTime.value = 0
     duration.value = 0
+
+    // Обновляем метаданные на экране блокировки
+    updateMediaSessionMetadata(track)
 
     try {
       const url = await getStreamUrl(track.id)

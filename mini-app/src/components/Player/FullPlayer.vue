@@ -28,12 +28,18 @@
 
     <!-- Progress Bar -->
     <div class="progress-section">
-      <div class="progress-bar" @click="handleSeek">
-        <div class="progress-fill" :style="{ width: playerStore.progress + '%' }"></div>
-        <div class="progress-thumb" :style="{ left: playerStore.progress + '%' }"></div>
+      <div 
+        class="progress-bar" 
+        ref="progressBar"
+        :class="{ dragging: isDragging }"
+        @mousedown="startDrag"
+        @touchstart.prevent="startDrag"
+      >
+        <div class="progress-fill" :style="{ width: displayProgress + '%' }"></div>
+        <div class="progress-thumb" :style="{ left: displayProgress + '%' }"></div>
       </div>
       <div class="time-info">
-        <span>{{ playerStore.formattedTime }}</span>
+        <span>{{ isDragging ? formatTime(dragTime) : playerStore.formattedTime }}</span>
         <span>{{ playerStore.formattedDuration }}</span>
       </div>
     </div>
@@ -101,11 +107,30 @@
         <IconShare />
       </button>
     </div>
+
+    <!-- Menu -->
+    <Teleport to="body">
+      <div v-if="showMenu" class="menu-overlay" @click="showMenu = false">
+        <div class="menu" @click.stop>
+          <button class="menu-item" @click="addToQueueNext">
+            <IconNext />
+            <span>Воспроизвести следующим</span>
+          </button>
+          <button class="menu-item" @click="goToQueue">
+            <IconQueue />
+            <span>Очередь воспроизведения</span>
+          </button>
+          <button class="menu-item cancel" @click="showMenu = false">
+            <span>Отмена</span>
+          </button>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePlayerStore } from '../../stores/playerStore'
 import { api } from '../../api/client'
@@ -128,14 +153,66 @@ const router = useRouter()
 
 const playerStore = usePlayerStore()
 const showMenu = ref(false)
+const progressBar = ref(null)
+const isDragging = ref(false)
+const dragProgress = ref(0)
+const dragTime = ref(0)
 
 const currentTrack = computed(() => playerStore.currentTrack)
 
-function handleSeek(e) {
-  const rect = e.currentTarget.getBoundingClientRect()
-  const percent = ((e.clientX - rect.left) / rect.width) * 100
-  playerStore.seek(Math.max(0, Math.min(100, percent)))
+const displayProgress = computed(() => {
+  return isDragging.value ? dragProgress.value : playerStore.progress
+})
+
+function formatTime(seconds) {
+  if (!seconds || isNaN(seconds)) return '0:00'
+  const mins = Math.floor(seconds / 60)
+  const secs = Math.floor(seconds % 60)
+  return `${mins}:${secs.toString().padStart(2, '0')}`
 }
+
+function getProgressFromEvent(e) {
+  if (!progressBar.value) return 0
+  const rect = progressBar.value.getBoundingClientRect()
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX
+  const percent = ((clientX - rect.left) / rect.width) * 100
+  return Math.max(0, Math.min(100, percent))
+}
+
+function startDrag(e) {
+  isDragging.value = true
+  updateDrag(e)
+  
+  document.addEventListener('mousemove', updateDrag)
+  document.addEventListener('mouseup', endDrag)
+  document.addEventListener('touchmove', updateDrag)
+  document.addEventListener('touchend', endDrag)
+}
+
+function updateDrag(e) {
+  if (!isDragging.value) return
+  dragProgress.value = getProgressFromEvent(e)
+  dragTime.value = (dragProgress.value / 100) * playerStore.duration
+}
+
+function endDrag() {
+  if (isDragging.value) {
+    playerStore.seek(dragProgress.value)
+  }
+  isDragging.value = false
+  
+  document.removeEventListener('mousemove', updateDrag)
+  document.removeEventListener('mouseup', endDrag)
+  document.removeEventListener('touchmove', updateDrag)
+  document.removeEventListener('touchend', endDrag)
+}
+
+onUnmounted(() => {
+  document.removeEventListener('mousemove', updateDrag)
+  document.removeEventListener('mouseup', endDrag)
+  document.removeEventListener('touchmove', updateDrag)
+  document.removeEventListener('touchend', endDrag)
+})
 
 async function toggleFavorite() {
   if (!currentTrack.value) return
@@ -163,6 +240,19 @@ function openInTelegram() {
       file_id: currentTrack.value.file_id
     }))
   }
+}
+
+function addToQueueNext() {
+  if (currentTrack.value) {
+    playerStore.addToQueueNext(currentTrack.value)
+  }
+  showMenu.value = false
+}
+
+function goToQueue() {
+  showMenu.value = false
+  emit('close')
+  router.push('/queue')
 }
 </script>
 
@@ -293,8 +383,17 @@ function openInTelegram() {
 }
 
 .progress-bar:hover .progress-thumb,
-.progress-bar:active .progress-thumb {
+.progress-bar:active .progress-thumb,
+.progress-bar.dragging .progress-thumb {
   opacity: 1;
+}
+
+.progress-bar.dragging {
+  height: 6px;
+}
+
+.progress-bar.dragging .progress-fill {
+  transition: none;
 }
 
 .time-info {
@@ -418,6 +517,51 @@ function openInTelegram() {
   align-items: center;
   justify-content: center;
   padding: 0 4px;
+}
+
+/* Menu */
+.menu-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: flex-end;
+  z-index: 200;
+}
+
+.menu {
+  background: var(--bg-elevated);
+  width: 100%;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  padding: var(--spacing-md);
+  padding-bottom: calc(var(--spacing-md) + env(safe-area-inset-bottom));
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  width: 100%;
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--font-size-md);
+}
+
+.menu-item:active {
+  background: var(--bg-highlight);
+}
+
+.menu-item.cancel {
+  justify-content: center;
+  color: var(--text-secondary);
+  margin-top: var(--spacing-sm);
+}
+
+.menu-item svg {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
 }
 </style>
 
