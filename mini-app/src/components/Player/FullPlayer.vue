@@ -16,7 +16,13 @@
     <!-- Cover Art -->
     <div class="cover-section">
       <div class="cover-art">
-        <div class="cover-placeholder">
+        <img 
+          v-if="currentTrack?.thumbnail_url" 
+          :src="currentTrack.thumbnail_url" 
+          :alt="currentTrack.title"
+          class="cover-image"
+        />
+        <div v-else class="cover-placeholder">
           <IconMusic />
         </div>
       </div>
@@ -335,6 +341,12 @@ function goToQueue() {
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.cover-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .cover-placeholder {

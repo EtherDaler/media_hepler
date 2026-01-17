@@ -13,7 +13,14 @@
         <span v-else>{{ index }}</span>
       </div>
       <div v-else class="track-cover">
-        <div class="cover-placeholder">
+        <img 
+          v-if="track.thumbnail_url" 
+          :src="track.thumbnail_url" 
+          :alt="track.title"
+          class="cover-image"
+          @error="handleImageError"
+        />
+        <div v-else class="cover-placeholder">
           <IconMusic />
         </div>
         <div v-if="isPlaying" class="playing-overlay">
@@ -145,6 +152,11 @@ function handleClick() {
   playerStore.playTrack(props.track, props.tracklist)
 }
 
+function handleImageError(e) {
+  // Если обложка не загрузилась, скрываем img
+  e.target.style.display = 'none'
+}
+
 function addToQueue() {
   playerStore.addToQueue(props.track)
   showMenu.value = false
@@ -206,6 +218,12 @@ function toggleFavorite() {
   border-radius: var(--radius-sm);
   overflow: hidden;
   position: relative;
+}
+
+.cover-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .cover-placeholder {

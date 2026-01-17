@@ -1,5 +1,6 @@
 """Роуты для аудио"""
 
+import re
 import httpx
 from typing import Optional, Set
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -24,6 +25,30 @@ router = APIRouter(prefix="/audio", tags=["Audio"])
 # Telegram Bot API base URL
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 TELEGRAM_FILE_URL = f"https://api.telegram.org/file/bot{BOT_TOKEN}"
+
+
+def get_thumbnail_url(source: Optional[str], source_url: Optional[str]) -> Optional[str]:
+    """
+    Генерирует URL обложки на основе источника.
+    Для YouTube извлекает video_id и возвращает URL обложки.
+    """
+    if source != 'youtube' or not source_url:
+        return None
+    
+    # Паттерны для извлечения video_id из разных форматов YouTube URL
+    patterns = [
+        r'(?:v=|/v/|youtu\.be/|/embed/|/shorts/)([a-zA-Z0-9_-]{11})',
+        r'^([a-zA-Z0-9_-]{11})$'  # Просто video_id
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, source_url)
+        if match:
+            video_id = match.group(1)
+            # Возвращаем URL квадратной обложки (mqdefault - 320x180, обрежется на клиенте)
+            return f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg"
+    
+    return None
 
 
 async def get_favorite_audio_ids(db: AsyncSession, user_id: int) -> Set[int]:
@@ -57,8 +82,10 @@ async def list_audio(
             artist=audio.artist,
             duration=audio.duration,
             source=audio.source,
+            source_url=audio.source_url,
             created_at=audio.created_at,
-            is_favorite=audio.id in favorite_ids
+            is_favorite=audio.id in favorite_ids,
+            thumbnail_url=get_thumbnail_url(audio.source, audio.source_url)
         )
         for audio in audio_list
     ]
@@ -95,8 +122,10 @@ async def get_audio(
         artist=audio.artist,
         duration=audio.duration,
         source=audio.source,
+        source_url=audio.source_url,
         created_at=audio.created_at,
-        is_favorite=is_fav
+        is_favorite=is_fav,
+        thumbnail_url=get_thumbnail_url(audio.source, audio.source_url)
     )
 
 

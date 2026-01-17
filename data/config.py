@@ -20,3 +20,6 @@ DEV_CHANEL_ID = os.environ.get("DEV_CHANEL_ID")
 PROXYS = os.environ.get("PROXY", "[]")
 SIMPLE_PROXY = os.environ.get("SIMPLE_PROXY")
 DEFAULT_YT_COOKIE = os.environ.get("DEFAULT_YT_COOKIE")
+
+# Mini App URL (для кнопки в боте)
+MINI_APP_URL = os.environ.get("MINI_APP_URL")

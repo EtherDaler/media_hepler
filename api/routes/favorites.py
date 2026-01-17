@@ -11,6 +11,7 @@ from api.schemas import (
     ToggleFavoriteResponse,
     AudioResponse
 )
+from api.routes.audio import get_thumbnail_url
 from db.audio_commands import (
     get_user_favorites,
     add_to_favorites,
@@ -47,8 +48,10 @@ async def list_favorites(
                     artist=fav.audio.artist,
                     duration=fav.audio.duration,
                     source=fav.audio.source,
+                    source_url=fav.audio.source_url,
                     created_at=fav.audio.created_at,
-                    is_favorite=True
+                    is_favorite=True,
+                    thumbnail_url=get_thumbnail_url(fav.audio.source, fav.audio.source_url)
                 ),
                 added_at=fav.added_at
             ))

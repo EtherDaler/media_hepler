@@ -538,9 +538,18 @@ def _convert_audio(video, path, out_format, filename):
     return f"{filename}.{out_format}"
 
 async def get_audio_from_youtube(link, path="./audio/youtube", out_format="mp3", filename=None):
-    """Скачивает видео и конвертирует в аудио с метаданными (автор, название)"""
+    """
+    Скачивает видео и конвертирует в аудио с метаданными (автор, название).
+    
+    Returns:
+        dict: {'audio': 'filename.mp3', 'thumbnail': '/path/to/thumbnail.jpg'} или None
+    """
     audio = None
+    thumbnail = None
     video_path = "./videos/youtube"
+    
+    # Извлекаем video_id для обложки
+    video_id = extract_video_id(link)
     
     # Сначала получаем информацию о видео для метаданных
     try:
@@ -552,7 +561,19 @@ async def get_audio_from_youtube(link, path="./audio/youtube", out_format="mp3",
         title = "Unknown"
         artist = "Unknown"
     
+    # Скачиваем обложку ПАРАЛЛЕЛЬНО с видео
+    async def download_thumbnail_async():
+        if video_id:
+            try:
+                return await asyncio.to_thread(download_youtube_thumbnail, video_id)
+            except Exception as e:
+                logger.warning(f"Could not download thumbnail: {e}")
+        return None
+    
+    # Запускаем параллельно
+    thumbnail_task = asyncio.create_task(download_thumbnail_async())
     video = await download_from_youtube(link)
+    thumbnail = await thumbnail_task  # Получаем результат (уже готов или почти готов)
     
     # Проверка на None СРАЗУ после скачивания
     if video is None:
@@ -602,7 +623,12 @@ async def get_audio_from_youtube(link, path="./audio/youtube", out_format="mp3",
         if os.path.isfile(input_file):
             os.remove(input_file)
     
-    return audio
+    if audio:
+        return {
+            'audio': audio,
+            'thumbnail': thumbnail
+        }
+    return None
 
 def reencode_video(path_to_video):
     """
@@ -846,6 +872,108 @@ def get_youtube_video_info(url):
         os.environ.pop('HTTPS_PROXY', None)
         video_info = get_yt_info(ydl_opts, url, video_id)
     return video_info
+
+
+def download_youtube_thumbnail(video_id: str, output_path: str = "./thumbnails") -> Optional[str]:
+    """
+    Скачивает и обрабатывает обложку видео с YouTube.
+    Возвращает путь к квадратной обложке 320x320 для Telegram.
+    """
+    os.makedirs(output_path, exist_ok=True)
+    
+    # Пробуем разные качества обложек
+    thumbnail_urls = [
+        f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg",
+        f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
+        f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg",
+    ]
+    
+    thumbnail_path = os.path.join(output_path, f"{video_id}.jpg")
+    square_thumbnail_path = os.path.join(output_path, f"{video_id}_square.jpg")
+    
+    # Скачиваем обложку (сначала напрямую, потом через прокси)
+    downloaded = False
+    
+    # Попытка 1: без прокси
+    for url in thumbnail_urls:
+        try:
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200 and len(response.content) > 1000:
+                with open(thumbnail_path, 'wb') as f:
+                    f.write(response.content)
+                downloaded = True
+                break
+        except Exception as e:
+            logger.warning(f"Failed to download thumbnail from {url}: {e}")
+            continue
+    
+    # Попытка 2: с прокси если не удалось напрямую
+    if not downloaded:
+        proxy = get_random_proxy()
+        if proxy:
+            proxy_url = list(proxy.keys())[0]
+            proxies = {
+                'http': proxy_url,
+                'https': proxy_url
+            }
+            for url in thumbnail_urls:
+                try:
+                    response = requests.get(url, timeout=15, proxies=proxies)
+                    if response.status_code == 200 and len(response.content) > 1000:
+                        with open(thumbnail_path, 'wb') as f:
+                            f.write(response.content)
+                        downloaded = True
+                        logger.info(f"Downloaded thumbnail via proxy: {video_id}")
+                        break
+                except Exception as e:
+                    logger.warning(f"Failed to download thumbnail via proxy from {url}: {e}")
+                    continue
+    
+    if not downloaded:
+        return None
+    
+    # Обрезаем до квадрата с помощью ffmpeg
+    try:
+        # Получаем размеры изображения
+        probe_cmd = [
+            'ffprobe', '-v', 'error',
+            '-select_streams', 'v:0',
+            '-show_entries', 'stream=width,height',
+            '-of', 'json',
+            thumbnail_path
+        ]
+        probe_result = subprocess.run(probe_cmd, capture_output=True, text=True)
+        probe_data = json.loads(probe_result.stdout)
+        
+        width = probe_data['streams'][0]['width']
+        height = probe_data['streams'][0]['height']
+        
+        # Вычисляем размер квадрата (минимум из ширины и высоты)
+        size = min(width, height)
+        x_offset = (width - size) // 2
+        y_offset = (height - size) // 2
+        
+        # Обрезаем до квадрата и масштабируем до 320x320
+        ffmpeg_cmd = [
+            'ffmpeg', '-i', thumbnail_path,
+            '-vf', f'crop={size}:{size}:{x_offset}:{y_offset},scale=320:320',
+            '-y',
+            square_thumbnail_path
+        ]
+        result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            # Удаляем оригинальный файл
+            if os.path.exists(thumbnail_path):
+                os.remove(thumbnail_path)
+            return square_thumbnail_path
+        else:
+            logger.error(f"FFmpeg thumbnail error: {result.stderr}")
+            return thumbnail_path  # Возвращаем оригинал если не получилось обрезать
+            
+    except Exception as e:
+        logger.error(f"Error processing thumbnail: {e}")
+        return thumbnail_path  # Возвращаем оригинал если ошибка
 
 
 def replace_audio(video_path, audio_path, path="./videos/for_replace/ready"):

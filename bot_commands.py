@@ -132,9 +132,15 @@ def send_video_through_api(chat_id, file_path, width, height):
         return False
 
 
-def send_audio_through_api(chat_id: int, file_path: str, delete_after: bool = False) -> dict:
+def send_audio_through_api(chat_id: int, file_path: str, thumbnail_path: str = None, delete_after: bool = False) -> dict:
     """
     Отправка аудио в Telegram через API (аналогично send_video_through_api)
+    
+    Args:
+        chat_id: ID чата
+        file_path: Путь к аудио файлу
+        thumbnail_path: Путь к обложке (опционально)
+        delete_after: Удалить файл после отправки
     
     Returns:
         dict с ключами 'success' и 'response' (JSON ответ API)
@@ -146,31 +152,43 @@ def send_audio_through_api(chat_id: int, file_path: str, delete_after: bool = Fa
         return {'success': False, 'response': None}
     
     try:
+        files = {}
+        
         with open(file_path, 'rb') as audio_file:
-            files = {
-                'audio': (os.path.basename(file_path), audio_file, 'audio/mpeg')
-            }
-            headers = {
-                'Connection': 'close',
-                'Expect': ''
-            }
-            data = {
-                'chat_id': chat_id,
-                'caption': 'Ваше аудио готово!\n@django_media_helper_bot',
-                'title': os.path.basename(file_path)
-            }
-            response = requests.post(url, headers=headers, data=data, files=files, timeout=(30, 300))
-            logger.info(f"Audio API Response: {response.status_code}")
+            files['audio'] = (os.path.basename(file_path), audio_file.read(), 'audio/mpeg')
+        
+        # Добавляем thumbnail если есть
+        if thumbnail_path and os.path.isfile(thumbnail_path):
+            with open(thumbnail_path, 'rb') as thumb_file:
+                files['thumbnail'] = (os.path.basename(thumbnail_path), thumb_file.read(), 'image/jpeg')
+        
+        headers = {
+            'Connection': 'close',
+            'Expect': ''
+        }
+        data = {
+            'chat_id': chat_id,
+            'caption': 'Ваше аудио готово!\n@django_media_helper_bot',
+            'title': os.path.basename(file_path)
+        }
+        response = requests.post(url, headers=headers, data=data, files=files, timeout=(30, 300))
+        logger.info(f"Audio API Response: {response.status_code}")
     except Exception as e:
         logger.error(f"Ошибка при отправке аудио: {e}")
         return {'success': False, 'response': None}
     
-    # Удаляем файл после отправки если указано
-    if delete_after and os.path.isfile(file_path):
-        try:
-            os.remove(file_path)
-        except Exception as e:
-            logger.warning(f"Не удалось удалить файл {file_path}: {e}")
+    # Удаляем файлы после отправки если указано
+    if delete_after:
+        if os.path.isfile(file_path):
+            try:
+                os.remove(file_path)
+            except Exception as e:
+                logger.warning(f"Не удалось удалить файл {file_path}: {e}")
+        if thumbnail_path and os.path.isfile(thumbnail_path):
+            try:
+                os.remove(thumbnail_path)
+            except Exception as e:
+                logger.warning(f"Не удалось удалить thumbnail {thumbnail_path}: {e}")
     
     if response.status_code == 200:
         return {'success': True, 'response': response.json()}
@@ -435,20 +453,34 @@ async def get_link(message: Message, state: FSMContext, session: AsyncSession) -
         await message.answer("Подождите загружаем аудио...")
         await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VOICE)
         try:
-            filename = await worker.get_audio_from_youtube(link)
+            result = await worker.get_audio_from_youtube(link)
         except Exception as e:
             logger.error(e)
-            filename = None    
-        if filename:
+            result = None    
+        if result:
+            filename = result['audio']
+            thumbnail_path = result.get('thumbnail')
             try:
-                doc = await message.answer_audio(audio=FSInputFile(f"./audio/youtube/{filename}"), caption="Ваше аудио готово!\n@django_media_helper_bot")
+                # Подготавливаем thumbnail если есть
+                thumbnail = FSInputFile(thumbnail_path) if thumbnail_path and os.path.isfile(thumbnail_path) else None
+                
+                doc = await message.answer_audio(
+                    audio=FSInputFile(f"./audio/youtube/{filename}"),
+                    thumbnail=thumbnail,
+                    caption="Ваше аудио готово!\n@django_media_helper_bot"
+                )
                 await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал аудио из #YouTube")
                 # Сохраняем аудио в БД для Mini App
                 if doc:
                     await save_sent_audio(session, doc, source='youtube', source_url=link)
             except TelegramEntityTooLarge:
                 logger.info("Обнаружен TelegramEntityTooLarge, переходим к отправке через API")
-                api_result = send_audio_through_api(message.chat.id, f"./audio/youtube/{filename}", delete_after=True)
+                api_result = send_audio_through_api(
+                    message.chat.id, 
+                    f"./audio/youtube/{filename}",
+                    thumbnail_path=thumbnail_path,
+                    delete_after=True
+                )
                 if not api_result['success']:
                     await message.answer("Извините, размер файла слишком большой для отправки по Telegram.")
                     await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать аудио из #YouTube, размер файла слишком большой")
@@ -462,8 +494,12 @@ async def get_link(message: Message, state: FSMContext, session: AsyncSession) -
                 await message.answer("Извините, произошла неизвестная ошибка при отправке аудио.")
                 await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать аудио из #YouTube, {e}")
             finally:
+                # Удаляем аудио файл
                 if os.path.isfile(f"./audio/youtube/{filename}"):
                     os.remove(f"./audio/youtube/{filename}")
+                # Удаляем thumbnail
+                if thumbnail_path and os.path.isfile(thumbnail_path):
+                    os.remove(thumbnail_path)
         else:
             await message.answer("Извините, произошла ошибка. Видео недоступно!")
             await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать аудио из #YouTube")
@@ -922,20 +958,34 @@ async def handle_download_audio(callback: CallbackQuery, state: FSMContext, sess
     link = f"https://www.youtube.com/watch?v={video_id}"
     await callback.bot.send_chat_action(callback.message.chat.id, ChatAction.UPLOAD_VOICE)
     try:
-        filename = await worker.get_audio_from_youtube(link)
+        result = await worker.get_audio_from_youtube(link)
     except Exception as e:
         logger.error(e)
-        filename = None    
-    if filename:
+        result = None    
+    if result:
+        filename = result['audio']
+        thumbnail_path = result.get('thumbnail')
         try:
-            doc = await callback.message.answer_audio(audio=FSInputFile(f"./audio/youtube/{filename}"), caption="Ваше аудио готово!\n@django_media_helper_bot")
+            # Подготавливаем thumbnail если есть
+            thumbnail = FSInputFile(thumbnail_path) if thumbnail_path and os.path.isfile(thumbnail_path) else None
+            
+            doc = await callback.message.answer_audio(
+                audio=FSInputFile(f"./audio/youtube/{filename}"),
+                thumbnail=thumbnail,
+                caption="Ваше аудио готово!\n@django_media_helper_bot"
+            )
             await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')} и успешно скачал аудио из #YouTube")
             # Сохраняем аудио в БД для Mini App
             if doc:
                 await save_sent_audio(session, doc, source='youtube', source_url=link)
         except TelegramEntityTooLarge:
             logger.info("Обнаружен TelegramEntityTooLarge, переходим к отправке через API")
-            api_result = send_audio_through_api(callback.message.chat.id, f"./audio/youtube/{filename}", delete_after=True)
+            api_result = send_audio_through_api(
+                callback.message.chat.id, 
+                f"./audio/youtube/{filename}",
+                thumbnail_path=thumbnail_path,
+                delete_after=True
+            )
             if not api_result['success']:
                 await callback.message.edit_text("Извините, размер файла слишком большой для отправки по Telegram.")
                 await callback.message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')}, но не смог скачать аудио из #YouTube, размер файла слишком большой")
@@ -949,8 +999,12 @@ async def handle_download_audio(callback: CallbackQuery, state: FSMContext, sess
             await callback.message.edit_text("Извините, произошла неизвестная ошибка при отправке аудио.")
             await callback.message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')}, но не смог скачать аудио из #YouTube, {e}")
         finally:
+            # Удаляем аудио файл
             if os.path.isfile(f"./audio/youtube/{filename}"):
                 os.remove(f"./audio/youtube/{filename}")
+            # Удаляем thumbnail
+            if thumbnail_path and os.path.isfile(thumbnail_path):
+                os.remove(thumbnail_path)
     else:
         await callback.message.edit_text("Извините, произошла ошибка. Видео недоступно!")
         await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')}, но не смог скачать аудио из #YouTube")
@@ -1131,3 +1185,77 @@ async def reset_handler(message: Message, state: FSMContext):
     """Полный сброс состояния"""
     await state.clear()
     await message.answer("✅ Состояние сброшено. Начните новый поиск.")
+
+
+# ============================================
+# Синхронизация аудио для Mini App
+# ============================================
+
+@router.message(Command("sync"))
+async def sync_audio_handler(message: Message, session: AsyncSession):
+    """
+    Команда для синхронизации аудио с Mini App.
+    Показывает инструкцию по синхронизации.
+    """
+    keyboard = [
+        [InlineKeyboardButton(text="📱 Открыть плеер", web_app={"url": config.MINI_APP_URL})]
+    ] if hasattr(config, 'MINI_APP_URL') and config.MINI_APP_URL else []
+    
+    reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard) if keyboard else None
+    
+    await message.answer(
+        "🔄 **Синхронизация аудио с плеером**\n\n"
+        "Чтобы добавить ваши существующие аудио в плеер Mini App:\n\n"
+        "1️⃣ Перейдите в чат со мной\n"
+        "2️⃣ Найдите аудио, которые хотите добавить\n"
+        "3️⃣ **Перешлите** их мне (Forward)\n\n"
+        "Я автоматически добавлю каждый трек в вашу библиотеку.\n\n"
+        "💡 Можно пересылать несколько аудио за раз!",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+
+
+@router.message(F.audio)
+async def handle_forwarded_audio(message: Message, session: AsyncSession):
+    """
+    Обработчик для пересланных или отправленных аудио.
+    Сохраняет аудио в библиотеку пользователя для Mini App.
+    """
+    audio = message.audio
+    
+    if not audio:
+        return
+    
+    # Определяем источник
+    if message.forward_from or message.forward_from_chat:
+        source = "forwarded"
+    else:
+        source = "uploaded"
+    
+    try:
+        # Сохраняем аудио в базу
+        saved_audio = await save_sent_audio(
+            session=session,
+            message=message,
+            source=source,
+            source_url=None
+        )
+        
+        if saved_audio:
+            title = audio.title or audio.file_name or "Без названия"
+            artist = audio.performer or "Неизвестный исполнитель"
+            
+            await message.reply(
+                f"✅ Добавлено в библиотеку:\n\n"
+                f"🎵 {title}\n"
+                f"👤 {artist}",
+                parse_mode='Markdown'
+            )
+        else:
+            # Аудио уже было в библиотеке
+            await message.reply("ℹ️ Этот трек уже есть в вашей библиотеке.")
+            
+    except Exception as e:
+        logger.error(f"Error saving forwarded audio: {e}")
+        await message.reply("❌ Не удалось добавить трек. Попробуйте позже.")

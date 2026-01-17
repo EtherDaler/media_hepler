@@ -10,7 +10,13 @@
       <!-- Track Info -->
       <div class="track-info">
         <div class="track-cover">
-          <div class="cover-placeholder">
+          <img 
+            v-if="currentTrack.thumbnail_url" 
+            :src="currentTrack.thumbnail_url" 
+            :alt="currentTrack.title"
+            class="cover-image"
+          />
+          <div v-else class="cover-placeholder">
             <IconMusic />
           </div>
         </div>
@@ -126,6 +132,12 @@ function openFullPlayer() {
   border-radius: var(--radius-sm);
   overflow: hidden;
   flex-shrink: 0;
+}
+
+.cover-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .cover-placeholder {

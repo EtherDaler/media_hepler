@@ -16,6 +16,7 @@ from api.schemas import (
     ReorderTracksRequest,
     AudioResponse
 )
+from api.routes.audio import get_thumbnail_url
 from db.audio_commands import (
     create_playlist,
     get_user_playlists,
@@ -114,8 +115,10 @@ async def get_playlist(
             artist=pt.audio.artist,
             duration=pt.audio.duration,
             source=pt.audio.source,
+            source_url=pt.audio.source_url,
             created_at=pt.audio.created_at,
-            is_favorite=pt.audio.id in favorite_ids
+            is_favorite=pt.audio.id in favorite_ids,
+            thumbnail_url=get_thumbnail_url(pt.audio.source, pt.audio.source_url)
         )
         for pt in playlist.tracks if pt.audio
     ]

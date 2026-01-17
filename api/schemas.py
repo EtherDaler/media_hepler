@@ -19,6 +19,8 @@ class AudioResponse(AudioBase):
     file_id: str
     created_at: Optional[datetime] = None
     is_favorite: bool = False
+    thumbnail_url: Optional[str] = None  # URL обложки (для YouTube треков)
+    source_url: Optional[str] = None
     
     class Config:
         from_attributes = True

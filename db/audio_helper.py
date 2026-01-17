@@ -16,7 +16,7 @@ async def save_sent_audio(
     message: Message,  # Сообщение с отправленным аудио
     source: Optional[str] = None,
     source_url: Optional[str] = None
-) -> bool:
+):
     """
     Сохранить отправленное аудио в БД.
     
@@ -27,12 +27,12 @@ async def save_sent_audio(
         source_url: Оригинальная ссылка
     
     Returns:
-        True если сохранено успешно
+        UserAudio если сохранено успешно, None если уже существует или ошибка
     """
     try:
         if not message or not message.audio:
             logger.warning("Message doesn't contain audio")
-            return False
+            return None
         
         audio = message.audio
         user_id = message.chat.id
@@ -41,7 +41,7 @@ async def save_sent_audio(
         existing = await get_audio_by_file_id(session, audio.file_id)
         if existing:
             logger.info(f"Audio already saved: {audio.file_id}")
-            return True
+            return None  # Возвращаем None чтобы обработчик знал, что уже существует
         
         # Извлекаем метаданные
         title = audio.title or audio.file_name or "Unknown"
@@ -63,14 +63,14 @@ async def save_sent_audio(
         
         if saved:
             logger.info(f"Audio saved: {title} by {artist} for user {user_id}")
-            return True
+            return saved
         else:
             logger.error(f"Failed to save audio for user {user_id}")
-            return False
+            return None
             
     except Exception as e:
         logger.error(f"Error saving audio: {e}")
-        return False
+        return None
 
 
 async def save_audio_from_api_response(
