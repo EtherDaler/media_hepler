@@ -16,8 +16,8 @@ function getHeaders() {
   if (tg?.initData) {
     headers['X-Telegram-Init-Data'] = tg.initData
   } else {
-    // Для разработки без Telegram
-    headers['X-Telegram-Init-Data'] = 'dev:123456789'
+    // Для разработки без Telegram (используй свой Telegram ID)
+    headers['X-Telegram-Init-Data'] = 'dev:392046128'
   }
   
   return headers
