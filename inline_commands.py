@@ -173,10 +173,12 @@ async def chosen_inline_handler(chosen: ChosenInlineResult):
         logger.info("Skipping: help or invalid result")
         return
     
-    if not inline_message_id:
-        # Без inline_message_id не можем редактировать
-        logger.warning("No inline_message_id received. Enable /setinlinefeedback in @BotFather!")
-        return
+    # inline_message_id = None когда inline используется в личке с ботом
+    # В этом случае просто отправляем файл в личку
+    can_edit_inline = inline_message_id is not None
+    
+    if not can_edit_inline:
+        logger.info("No inline_message_id - will send file directly to user's DM")
     
     platform = detect_platform(url)
     logger.info(f"Platform detected: {platform}")
@@ -217,10 +219,16 @@ async def chosen_inline_handler(chosen: ChosenInlineResult):
                     pass
         
         if not file_path or not os.path.isfile(file_path):
-            await chosen.bot.edit_message_text(
-                inline_message_id=inline_message_id,
-                text="❌ Не удалось скачать. Попробуйте отправить ссылку боту напрямую."
-            )
+            if can_edit_inline:
+                await chosen.bot.edit_message_text(
+                    inline_message_id=inline_message_id,
+                    text="❌ Не удалось скачать. Попробуйте отправить ссылку боту напрямую."
+                )
+            else:
+                await chosen.bot.send_message(
+                    chat_id=user_id,
+                    text="❌ Не удалось скачать. Попробуйте отправить ссылку напрямую."
+                )
             return
         
         file_size = os.path.getsize(file_path)
@@ -262,30 +270,31 @@ async def chosen_inline_handler(chosen: ChosenInlineResult):
                 temp_message_id = temp_msg.message_id
             
             if not file_id:
-                await chosen.bot.edit_message_text(
-                    inline_message_id=inline_message_id,
-                    text="❌ Не удалось загрузить файл."
-                )
+                error_text = "❌ Не удалось загрузить файл."
+                if can_edit_inline:
+                    await chosen.bot.edit_message_text(inline_message_id=inline_message_id, text=error_text)
+                else:
+                    await chosen.bot.send_message(chat_id=user_id, text=error_text)
                 return
             
-            # Редактируем inline сообщение — заменяем текст на аудио
-            await chosen.bot.edit_message_media(
-                inline_message_id=inline_message_id,
-                media=InputMediaAudio(
-                    media=file_id,
-                    caption="🎵 via @django_media_helper_bot"
+            if can_edit_inline:
+                # Редактируем inline сообщение — заменяем текст на аудио
+                await chosen.bot.edit_message_media(
+                    inline_message_id=inline_message_id,
+                    media=InputMediaAudio(
+                        media=file_id,
+                        caption="🎵 via @django_media_helper_bot"
+                    )
                 )
-            )
-            
-            # Удаляем временное сообщение из лички
-            if temp_message_id:
-                await chosen.bot.delete_message(chat_id=user_id, message_id=temp_message_id)
+                # Удаляем временное сообщение из лички
+                if temp_message_id:
+                    await chosen.bot.delete_message(chat_id=user_id, message_id=temp_message_id)
+            # Если can_edit_inline=False, аудио уже отправлено в личку — ничего не делаем
             
         else:
             # Видео
             if is_large_file:
                 # Большой файл — через локальный Bot API
-                # Получаем размеры видео
                 width, height = await asyncio.to_thread(get_video_dimensions, file_path)
                 
                 api_result = await asyncio.to_thread(
@@ -296,19 +305,19 @@ async def chosen_inline_handler(chosen: ChosenInlineResult):
                     height
                 )
                 if not api_result:
-                    await chosen.bot.edit_message_text(
-                        inline_message_id=inline_message_id,
-                        text="❌ Не удалось отправить большой файл."
-                    )
+                    error_text = "❌ Не удалось отправить большой файл."
+                    if can_edit_inline:
+                        await chosen.bot.edit_message_text(inline_message_id=inline_message_id, text=error_text)
+                    else:
+                        await chosen.bot.send_message(chat_id=user_id, text=error_text)
                     return
                 
-                # send_video_through_api возвращает True/False, нужно получить file_id другим способом
-                # Ждём и ищем последнее сообщение — это не идеально, но работает
-                # Лучше переделать send_video_through_api чтобы возвращал response
-                await chosen.bot.edit_message_text(
-                    inline_message_id=inline_message_id,
-                    text="✅ Видео отправлено в личные сообщения бота.\nФайл слишком большой для inline."
-                )
+                # Видео уже отправлено в личку через API
+                if can_edit_inline:
+                    await chosen.bot.edit_message_text(
+                        inline_message_id=inline_message_id,
+                        text="✅ Видео отправлено в личные сообщения бота.\nФайл слишком большой для inline."
+                    )
                 return
             else:
                 # Маленький файл — через aiogram
@@ -320,27 +329,29 @@ async def chosen_inline_handler(chosen: ChosenInlineResult):
                 file_id = temp_msg.video.file_id
                 temp_message_id = temp_msg.message_id
             
-            # Редактируем inline сообщение — заменяем текст на видео
-            await chosen.bot.edit_message_media(
-                inline_message_id=inline_message_id,
-                media=InputMediaVideo(
-                    media=file_id,
-                    caption="🎥 via @django_media_helper_bot"
+            if can_edit_inline:
+                # Редактируем inline сообщение — заменяем текст на видео
+                await chosen.bot.edit_message_media(
+                    inline_message_id=inline_message_id,
+                    media=InputMediaVideo(
+                        media=file_id,
+                        caption="🎥 via @django_media_helper_bot"
+                    )
                 )
-            )
-            
-            # Удаляем временное сообщение из лички
-            await chosen.bot.delete_message(chat_id=user_id, message_id=temp_message_id)
+                # Удаляем временное сообщение из лички
+                await chosen.bot.delete_message(chat_id=user_id, message_id=temp_message_id)
+            # Если can_edit_inline=False, видео уже отправлено в личку — ничего не делаем
         
         logger.info(f"Inline download success: {platform} {'audio' if is_audio else 'video'} for user {user_id}")
         
     except Exception as e:
-        logger.error(f"Inline download error: {e}")
+        logger.error(f"Inline download error: {e}", exc_info=True)
         try:
-            await chosen.bot.edit_message_text(
-                inline_message_id=inline_message_id,
-                text="❌ Ошибка при скачивании. Попробуйте отправить ссылку боту напрямую."
-            )
+            error_text = "❌ Ошибка при скачивании. Попробуйте отправить ссылку боту напрямую."
+            if can_edit_inline:
+                await chosen.bot.edit_message_text(inline_message_id=inline_message_id, text=error_text)
+            else:
+                await chosen.bot.send_message(chat_id=user_id, text=error_text)
         except Exception:
             pass
     finally:
