@@ -221,6 +221,9 @@ class YoutubeSearchState(StatesGroup):
     select_action = State()
     select_format = State()
 
+class ShazamState(StatesGroup):
+    confirm_download = State()
+
 @router.message(CommandStart())
 async def command_start_handler(message: Message, session: AsyncSession) -> None:
     file = "./texts/start_text.txt"
@@ -1215,6 +1218,276 @@ async def handle_back_to_actions(callback: CallbackQuery, state: FSMContext):
     await state.set_state(YoutubeSearchState.select_action)
     await callback.answer()
 
+
+
+# ============================================
+# Распознавание музыки (Shazam)
+# ============================================
+
+def escape_markdown(text: str) -> str:
+    """Экранирует спецсимволы Markdown"""
+    if not text:
+        return text
+    for char in ['_', '*', '`', '[', ']', '(', ')']:
+        text = text.replace(char, f'\\{char}')
+    return text
+
+
+@router.message(F.voice)
+async def handle_voice_recognition(message: Message, state: FSMContext, session: AsyncSession):
+    """
+    Обработчик голосовых сообщений для распознавания музыки.
+    Пользователь отправляет голосовое с отрывком песни — бот распознаёт и предлагает скачать.
+    """
+    user_id = message.from_user.id
+    username = message.from_user.username or str(user_id)
+    voice_path = None
+    
+    # Очищаем предыдущее состояние чтобы избежать конфликтов
+    await state.clear()
+    
+    await message.bot.send_chat_action(message.chat.id, ChatAction.TYPING)
+    status_msg = await message.reply("🎵 Распознаю музыку...")
+    
+    try:
+        # Скачиваем голосовое сообщение
+        voice = message.voice
+        voice_file = await message.bot.get_file(voice.file_id)
+        
+        os.makedirs("./audio/recognition/", exist_ok=True)
+        voice_path = f"./audio/recognition/{user_id}_{voice.file_unique_id}.ogg"
+        await message.bot.download_file(voice_file.file_path, voice_path)
+        
+        # Распознаём музыку
+        recognized = await worker.recognize_music(voice_path)
+        
+        if not recognized:
+            await status_msg.edit_text(
+                "❌ Не удалось распознать музыку.\n\n"
+                "Попробуйте:\n"
+                "• Записать более чёткий отрывок\n"
+                "• Убедиться, что музыка хорошо слышна\n"
+                "• Записать хотя бы 5-10 секунд"
+            )
+            return
+        
+        # Формируем сообщение с результатом (экранируем спецсимволы)
+        title = recognized['title']
+        artist = recognized['artist']
+        album = recognized.get('album') or ''
+        year = recognized.get('year') or ''
+        
+        title_escaped = escape_markdown(title)
+        artist_escaped = escape_markdown(artist)
+        album_escaped = escape_markdown(album)
+        
+        info_parts = [f"🎵 *{title_escaped}*", f"👤 {artist_escaped}"]
+        if album:
+            info_parts.append(f"💿 {album_escaped}")
+        if year:
+            info_parts.append(f"📅 {year}")
+        
+        # Кнопки действий
+        keyboard = [
+            [InlineKeyboardButton(text="⬇️ Скачать трек", callback_data="shazam_download")]
+        ]
+        
+        # Добавляем ссылки если есть
+        links_row = []
+        if recognized.get('shazam_url'):
+            links_row.append(InlineKeyboardButton(text="🎧 Shazam", url=recognized['shazam_url']))
+        if recognized.get('spotify_url'):
+            # Конвертируем spotify:track:xxx в https URL
+            spotify_uri = recognized['spotify_url']
+            if spotify_uri.startswith('spotify:track:'):
+                track_id = spotify_uri.split(':')[-1]
+                links_row.append(InlineKeyboardButton(text="🟢 Spotify", url=f"https://open.spotify.com/track/{track_id}"))
+        
+        if links_row:
+            keyboard.append(links_row)
+        
+        reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+        
+        # Сохраняем данные для скачивания
+        await state.update_data(
+            shazam_result=recognized,
+            shazam_query=recognized['youtube_query']
+        )
+        await state.set_state(ShazamState.confirm_download)
+        
+        # Отправляем результат с обложкой если есть
+        if recognized.get('cover_url'):
+            try:
+                await status_msg.delete()
+                await message.answer_photo(
+                    photo=recognized['cover_url'],
+                    caption="\n".join(info_parts),
+                    reply_markup=reply_markup,
+                    parse_mode='Markdown'
+                )
+            except Exception:
+                # Если не получилось отправить фото — отправляем текст
+                await status_msg.edit_text(
+                    "\n".join(info_parts),
+                    reply_markup=reply_markup,
+                    parse_mode='Markdown'
+                )
+        else:
+            await status_msg.edit_text(
+                "\n".join(info_parts),
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+        
+        # Логируем в dev канал (игнорируем ошибки)
+        try:
+            await message.bot.send_message(
+                chat_id=config.DEV_CHANEL_ID,
+                text=f"🎵 @{username} (ID: {user_id}) распознал: {artist} - {title} #shazam"
+            )
+        except Exception:
+            pass
+        
+    except Exception as e:
+        logger.error(f"Error in voice recognition: {e}")
+        try:
+            await status_msg.edit_text("❌ Произошла ошибка при распознавании. Попробуйте позже.")
+        except Exception:
+            pass
+    finally:
+        # Гарантированно удаляем временный файл
+        if voice_path and os.path.isfile(voice_path):
+            try:
+                os.remove(voice_path)
+            except Exception:
+                pass
+
+
+@router.callback_query(F.data == "shazam_download", ShazamState.confirm_download)
+async def handle_shazam_download(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
+    """Скачать распознанный трек"""
+    user_id = callback.from_user.id
+    username = callback.from_user.username or str(user_id)
+    file_path = None
+    thumbnail_path = None
+    status_msg = None
+    
+    data = await state.get_data()
+    recognized = data.get('shazam_result')
+    query = data.get('shazam_query')
+    
+    if not recognized or not query:
+        await callback.answer("❌ Данные устарели, попробуйте заново", show_alert=True)
+        await state.clear()
+        return
+    
+    await callback.answer("⏳ Ищу и скачиваю...")
+    
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    
+    status_msg = await callback.message.reply("🔍 Ищу на YouTube...")
+    
+    try:
+        # Ищем на YouTube
+        search_results = worker.search_videos(query, max_results=1)
+        
+        if not search_results:
+            await status_msg.edit_text("❌ Не удалось найти трек на YouTube")
+            await state.clear()
+            return
+        
+        video = search_results[0]
+        youtube_url = f"https://www.youtube.com/watch?v={video['id']}"
+        
+        await status_msg.edit_text("⬇️ Скачиваю...")
+        
+        # Скачиваем аудио
+        result = await worker.get_audio_from_youtube(youtube_url)
+        
+        if not result or not result.get('audio'):
+            await status_msg.edit_text("❌ Не удалось скачать трек")
+            await state.clear()
+            return
+        
+        filename = result['audio']
+        thumbnail_path = result.get('thumbnail')
+        file_path = f"./audio/youtube/{filename}"
+        
+        await status_msg.edit_text("📤 Отправляю...")
+        
+        # Формируем caption
+        caption = (
+            f"🎵 {recognized['artist']} - {recognized['title']}\n"
+            f"@django_media_helper_bot"
+        )
+        
+        # Отправляем аудио с правильными метаданными
+        file_size = os.path.getsize(file_path) if os.path.isfile(file_path) else 0
+        
+        if file_size < 50 * 1024 * 1024:  # < 50MB
+            doc = await callback.message.answer_audio(
+                audio=FSInputFile(file_path),
+                title=recognized['title'],
+                performer=recognized['artist'],
+                thumbnail=FSInputFile(thumbnail_path) if thumbnail_path and os.path.isfile(thumbnail_path) else None,
+                caption=caption
+            )
+            
+            # Сохраняем в библиотеку (source_url сохранит ссылку на YouTube)
+            await save_sent_audio(session, doc, source='youtube', source_url=youtube_url)
+        else:
+            # Большой файл — через локальный API
+            api_result = send_audio_through_api(
+                user_id,
+                file_path,
+                thumbnail_path=thumbnail_path,
+                delete_after=False
+            )
+            
+            if api_result['success']:
+                await save_audio_from_api_response(session, user_id, api_result['response'], source='youtube', source_url=youtube_url)
+                await callback.message.answer(caption)
+            else:
+                await callback.message.answer("❌ Не удалось отправить файл")
+        
+        try:
+            await status_msg.delete()
+        except Exception:
+            pass
+        
+        # Логируем в dev канал (игнорируем ошибки)
+        try:
+            await callback.message.bot.send_message(
+                chat_id=config.DEV_CHANEL_ID,
+                text=f"✅ @{username} (ID: {user_id}) скачал через Shazam: {recognized['artist']} - {recognized['title']} #shazam_download"
+            )
+        except Exception:
+            pass
+        
+    except Exception as e:
+        logger.error(f"Error downloading shazam track: {e}")
+        try:
+            if status_msg:
+                await status_msg.edit_text("❌ Произошла ошибка при скачивании")
+        except Exception:
+            pass
+    finally:
+        # Гарантированно очищаем state и удаляем файлы
+        await state.clear()
+        
+        if file_path and os.path.isfile(file_path):
+            try:
+                os.remove(file_path)
+            except Exception:
+                pass
+        if thumbnail_path and os.path.isfile(thumbnail_path):
+            try:
+                os.remove(thumbnail_path)
+            except Exception:
+                pass
 
 
 @router.message(F.audio)

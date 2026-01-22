@@ -1113,6 +1113,164 @@ def get_audio_from_youtube_sync(link):
 def convert_to_audio_sync(path):
     return asyncio.run(convert_to_audio(path))
 
+
+# ==================== Music Recognition (Shazam) ====================
+
+async def recognize_music(audio_path: str) -> Optional[Dict[str, Any]]:
+    """
+    Распознать музыку из аудиофайла с помощью Shazam.
+    
+    Args:
+        audio_path: Путь к аудиофайлу (mp3, ogg, wav, m4a и др.)
+    
+    Returns:
+        Словарь с информацией о треке или None если не найдено:
+        {
+            'title': str,
+            'artist': str,
+            'album': str,
+            'year': str,
+            'cover_url': str,
+            'shazam_url': str,
+            'apple_music_url': str,
+            'spotify_url': str,
+            'youtube_query': str  # Для поиска на YouTube
+        }
+    """
+    try:
+        from shazamio import Shazam
+        
+        shazam = Shazam()
+        result = await shazam.recognize(audio_path)
+        
+        if not result or 'track' not in result:
+            logger.info(f"Shazam: track not found for {audio_path}")
+            return None
+        
+        track = result['track']
+        
+        # Извлекаем основную информацию
+        title = track.get('title', 'Unknown')
+        artist = track.get('subtitle', 'Unknown Artist')
+        
+        # Извлекаем метаданные
+        sections = track.get('sections', [])
+        album = None
+        year = None
+        
+        for section in sections:
+            if section.get('type') == 'SONG':
+                metadata = section.get('metadata', [])
+                for meta in metadata:
+                    if meta.get('title') == 'Album':
+                        album = meta.get('text')
+                    elif meta.get('title') == 'Released':
+                        year = meta.get('text')
+        
+        # Получаем обложку
+        images = track.get('images', {})
+        cover_url = images.get('coverarthq') or images.get('coverart')
+        
+        # Получаем ссылки
+        shazam_url = track.get('url')
+        
+        # Ищем ссылки на стриминговые сервисы
+        apple_music_url = None
+        spotify_url = None
+        
+        hub = track.get('hub', {})
+        providers = hub.get('providers', [])
+        for provider in providers:
+            if provider.get('type') == 'SPOTIFY':
+                actions = provider.get('actions', [])
+                for action in actions:
+                    if action.get('type') == 'uri':
+                        spotify_url = action.get('uri')
+            elif provider.get('type') == 'APPLEMUSIC':
+                actions = provider.get('actions', [])
+                for action in actions:
+                    if action.get('type') == 'uri':
+                        apple_music_url = action.get('uri')
+        
+        # Формируем поисковый запрос для YouTube
+        youtube_query = f"{artist} - {title}"
+        
+        logger.info(f"Shazam: found '{title}' by '{artist}'")
+        
+        return {
+            'title': title,
+            'artist': artist,
+            'album': album,
+            'year': year,
+            'cover_url': cover_url,
+            'shazam_url': shazam_url,
+            'apple_music_url': apple_music_url,
+            'spotify_url': spotify_url,
+            'youtube_query': youtube_query
+        }
+        
+    except ImportError:
+        logger.error("shazamio not installed. Run: pip install shazamio")
+        return None
+    except Exception as e:
+        logger.error(f"Error recognizing music: {e}")
+        return None
+
+
+async def recognize_and_download(audio_path: str, output_dir: str = "./audio/shazam") -> Optional[Dict[str, Any]]:
+    """
+    Распознать музыку и скачать трек с YouTube.
+    
+    Args:
+        audio_path: Путь к аудиофайлу для распознавания
+        output_dir: Директория для сохранения
+    
+    Returns:
+        Словарь с информацией о треке и путём к скачанному файлу:
+        {
+            'recognized': {...},  # Результат распознавания
+            'audio_file': str,    # Путь к скачанному файлу
+            'thumbnail': str      # Путь к обложке (если есть)
+        }
+    """
+    # Распознаём трек
+    recognized = await recognize_music(audio_path)
+    
+    if not recognized:
+        return None
+    
+    # Ищем на YouTube
+    query = recognized['youtube_query']
+    search_results = search_videos(query, max_results=1)
+    
+    if not search_results:
+        logger.warning(f"No YouTube results for: {query}")
+        return {
+            'recognized': recognized,
+            'audio_file': None,
+            'thumbnail': None
+        }
+    
+    # Скачиваем первый результат
+    video = search_results[0]
+    youtube_url = f"https://www.youtube.com/watch?v={video['id']}"
+    
+    result = await get_audio_from_youtube(youtube_url, path=output_dir)
+    
+    if result:
+        return {
+            'recognized': recognized,
+            'audio_file': f"{output_dir}/{result['audio']}",
+            'thumbnail': result.get('thumbnail')
+        }
+    
+    return {
+        'recognized': recognized,
+        'audio_file': None,
+        'thumbnail': None
+    }
+
+
 if __name__ == "__main__":
     print("Welcome to audio/video helper!")
     print("To download youtube video input 1\nTo extract audio from video input 2\nTo download audio from youtube "
