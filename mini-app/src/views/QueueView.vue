@@ -19,10 +19,16 @@
       <h2 class="section-title">Сейчас играет</h2>
       <div class="current-track">
         <div class="track-cover">
-          <div class="cover-placeholder">
+          <img 
+            v-if="playerStore.currentTrack.thumbnail_url" 
+            :src="playerStore.currentTrack.thumbnail_url" 
+            class="cover-image"
+            alt=""
+          />
+          <div v-else class="cover-placeholder">
             <IconMusic />
           </div>
-          <div class="playing-indicator">
+          <div class="playing-indicator" v-if="playerStore.isPlaying">
             <span></span><span></span><span></span>
           </div>
         </div>
@@ -40,25 +46,48 @@
         <span v-if="playerStore.upcomingCount" class="count">({{ playerStore.upcomingCount }})</span>
       </h2>
 
-      <div v-if="playerStore.upcomingTracks.length" class="queue-list">
-        <div
-          v-for="(track, index) in playerStore.upcomingTracks"
-          :key="track.id"
-          class="queue-item"
-          @click="playTrack(index)"
-        >
-          <div class="drag-handle">
-            <IconDrag />
+      <draggable
+        v-if="upcomingList.length"
+        v-model="upcomingList"
+        item-key="id"
+        handle=".drag-handle"
+        :animation="200"
+        ghost-class="queue-item-ghost"
+        chosen-class="queue-item-chosen"
+        drag-class="queue-item-drag"
+        class="queue-list"
+        @start="onDragStart"
+        @end="onDragEnd"
+      >
+        <template #item="{ element: track, index }">
+          <div
+            class="queue-item"
+            @click="playTrack(index)"
+          >
+            <div class="drag-handle" @click.stop>
+              <IconDrag />
+            </div>
+            <div class="track-cover-small">
+              <img 
+                v-if="track.thumbnail_url" 
+                :src="track.thumbnail_url" 
+                class="cover-image"
+                alt=""
+              />
+              <div v-else class="cover-placeholder">
+                <IconMusic />
+              </div>
+            </div>
+            <div class="track-info">
+              <span class="track-title truncate">{{ track.title || 'Unknown' }}</span>
+              <span class="track-artist truncate">{{ track.artist || 'Unknown Artist' }}</span>
+            </div>
+            <button class="remove-btn" @click.stop="removeTrack(index)">
+              <IconClear />
+            </button>
           </div>
-          <div class="track-info">
-            <span class="track-title truncate">{{ track.title || 'Unknown' }}</span>
-            <span class="track-artist truncate">{{ track.artist || 'Unknown Artist' }}</span>
-          </div>
-          <button class="remove-btn" @click.stop="removeTrack(index)">
-            <IconClear />
-          </button>
-        </div>
-      </div>
+        </template>
+      </draggable>
 
       <div v-else class="empty-state">
         <p>Очередь пуста</p>
@@ -69,6 +98,8 @@
 </template>
 
 <script setup>
+import { computed, ref } from 'vue'
+import draggable from 'vuedraggable'
 import { usePlayerStore } from '../stores/playerStore'
 import IconBack from '../components/Common/icons/IconBack.vue'
 import IconMusic from '../components/Common/icons/IconMusic.vue'
@@ -76,9 +107,41 @@ import IconDrag from '../components/Common/icons/IconDrag.vue'
 import IconClear from '../components/Common/icons/IconClear.vue'
 
 const playerStore = usePlayerStore()
+const isDragging = ref(false)
+
+// Computed с getter и setter для синхронизации с очередью
+const upcomingList = computed({
+  get() {
+    return playerStore.upcomingTracks
+  },
+  set(newList) {
+    // Воссоздаём очередь: треки до текущего + текущий + новый порядок upcoming
+    const currentIdx = playerStore.queueIndex
+    const beforeCurrent = playerStore.queue.slice(0, currentIdx)
+    const currentTrack = playerStore.queue[currentIdx]
+    
+    playerStore.queue.splice(0, playerStore.queue.length, ...beforeCurrent, currentTrack, ...newList)
+  }
+})
+
+function onDragStart() {
+  isDragging.value = true
+  // Haptic feedback если доступен
+  if (window.Telegram?.WebApp?.HapticFeedback) {
+    window.Telegram.WebApp.HapticFeedback.selectionChanged()
+  }
+}
+
+function onDragEnd() {
+  isDragging.value = false
+  // Haptic feedback при завершении
+  if (window.Telegram?.WebApp?.HapticFeedback) {
+    window.Telegram.WebApp.HapticFeedback.impactOccurred('light')
+  }
+}
 
 function playTrack(upcomingIndex) {
-  // upcomingIndex — индекс в upcomingTracks, нужно преобразовать в индекс в queue
+  if (isDragging.value) return
   const queueIndex = playerStore.queueIndex + 1 + upcomingIndex
   playerStore.playFromQueue(queueIndex)
 }
@@ -89,7 +152,6 @@ function removeTrack(upcomingIndex) {
 }
 
 function clearUpcoming() {
-  // Удаляем все треки после текущего
   const currentIdx = playerStore.queueIndex
   playerStore.queue.splice(currentIdx + 1)
 }
@@ -171,6 +233,20 @@ function clearUpcoming() {
   flex-shrink: 0;
 }
 
+.track-cover-small {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.cover-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .cover-placeholder {
   width: 100%;
   height: 100%;
@@ -184,6 +260,11 @@ function clearUpcoming() {
 .cover-placeholder svg {
   width: 24px;
   height: 24px;
+}
+
+.track-cover-small .cover-placeholder svg {
+  width: 18px;
+  height: 18px;
 }
 
 .playing-indicator {
@@ -241,23 +322,55 @@ function clearUpcoming() {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  padding: var(--spacing-sm) 0;
-  border-bottom: 1px solid var(--bg-elevated);
+  padding: var(--spacing-sm);
+  margin: 0 calc(-1 * var(--spacing-sm));
+  border-radius: var(--radius-md);
   cursor: pointer;
+  background: var(--bg-primary);
+  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  touch-action: manipulation;
 }
 
 .queue-item:active {
   background: var(--bg-elevated);
 }
 
+/* Drag and Drop States - Spotify-like animations */
+.queue-item-ghost {
+  opacity: 0.4;
+  background: var(--bg-elevated);
+}
+
+.queue-item-chosen {
+  background: var(--bg-elevated);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  transform: scale(1.02);
+  z-index: 10;
+  border-radius: var(--radius-md);
+}
+
+.queue-item-drag {
+  opacity: 1;
+  background: var(--bg-elevated);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  transform: scale(1.03);
+}
+
 .drag-handle {
   width: 32px;
-  height: 32px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-muted);
   cursor: grab;
+  touch-action: none;
+  transition: color 0.15s ease;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+  color: var(--text-secondary);
 }
 
 .drag-handle svg {
@@ -272,12 +385,11 @@ function clearUpcoming() {
   align-items: center;
   justify-content: center;
   color: var(--text-muted);
-  opacity: 0;
-  transition: opacity var(--transition-fast);
+  transition: color var(--transition-fast), opacity var(--transition-fast);
 }
 
-.queue-item:hover .remove-btn {
-  opacity: 1;
+.remove-btn:active {
+  color: var(--error);
 }
 
 .remove-btn svg {
@@ -289,6 +401,11 @@ function clearUpcoming() {
   text-align: center;
   padding: var(--spacing-xl);
   color: var(--text-secondary);
+}
+
+/* Smooth reorder animation */
+.queue-list :deep(.sortable-fallback) {
+  opacity: 0 !important;
 }
 </style>
 

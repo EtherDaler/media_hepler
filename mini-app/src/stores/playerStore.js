@@ -392,9 +392,43 @@ export const usePlayerStore = defineStore('player', () => {
     repeatMode.value = modes[(currentIndex + 1) % modes.length]
   }
 
+  // Оригинальный порядок очереди (до shuffle)
+  const originalQueue = ref([])
+
   function toggleShuffle() {
     isShuffled.value = !isShuffled.value
-    // TODO: Реализовать shuffle логику
+    
+    if (queue.value.length <= 1) return
+    
+    if (isShuffled.value) {
+      // Сохраняем оригинальный порядок
+      originalQueue.value = [...queue.value]
+      
+      // Перемешиваем все треки кроме текущего
+      const currentTrackItem = queue.value[queueIndex.value]
+      const beforeCurrent = queue.value.slice(0, queueIndex.value)
+      const afterCurrent = queue.value.slice(queueIndex.value + 1)
+      
+      // Перемешиваем треки после текущего (Fisher-Yates shuffle)
+      const toShuffle = [...afterCurrent]
+      for (let i = toShuffle.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [toShuffle[i], toShuffle[j]] = [toShuffle[j], toShuffle[i]]
+      }
+      
+      // Собираем новую очередь: до текущего + текущий + перемешанные
+      queue.value = [...beforeCurrent, currentTrackItem, ...toShuffle]
+    } else {
+      // Восстанавливаем оригинальный порядок
+      if (originalQueue.value.length > 0) {
+        const currentTrackItem = currentTrack.value
+        queue.value = [...originalQueue.value]
+        // Находим текущий трек в восстановленной очереди
+        queueIndex.value = queue.value.findIndex(t => t.id === currentTrackItem?.id)
+        if (queueIndex.value === -1) queueIndex.value = 0
+        originalQueue.value = []
+      }
+    }
   }
 
   function handleTrackEnd() {
