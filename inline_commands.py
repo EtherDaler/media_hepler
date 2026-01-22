@@ -197,29 +197,41 @@ async def chosen_inline_handler(chosen: ChosenInlineResult):
         else:
             # Видео
             if platform == 'youtube':
+                logger.info("Starting YouTube download...")
                 filename = await worker.download_from_youtube(url)
+                logger.info(f"YouTube download result: {filename}")
                 if filename:
+                    # download_from_youtube возвращает только имя файла
                     file_path = f"./videos/youtube/{filename}"
+                    logger.info(f"File path: {file_path}")
             elif platform == 'instagram':
                 logger.info("Starting Instagram download...")
-                filename = await worker.download_instagram_reels(url)
-                logger.info(f"Instagram download result: {filename}")
-                if filename:
-                    file_path = f"./videos/reels/{filename}"
-                    logger.info(f"File path set to: {file_path}")
+                result = await worker.download_instagram_reels(url)
+                logger.info(f"Instagram download result: {result}")
+                if result:
+                    # download_instagram_reels возвращает полный путь
+                    file_path = result
+                    logger.info(f"File path: {file_path}")
             elif platform == 'tiktok':
+                logger.info("Starting TikTok download...")
                 downloader = worker.TikTokDownloader(save_path='videos/tiktok')
                 filename = downloader.download_video(url)
+                logger.info(f"TikTok download result: {filename}")
                 if filename:
+                    # TikTokDownloader возвращает только имя файла
                     file_path = f"./videos/tiktok/{filename}"
+                    logger.info(f"File path: {file_path}")
             elif platform == 'pinterest':
+                logger.info("Starting Pinterest download...")
                 try:
                     import pinterest
                     filename = await pinterest.download_pinterest_video(url)
+                    logger.info(f"Pinterest download result: {filename}")
                     if filename:
                         file_path = f"./videos/pinterest/{filename}"
-                except Exception:
-                    pass
+                        logger.info(f"File path: {file_path}")
+                except Exception as e:
+                    logger.error(f"Pinterest download error: {e}")
         
         logger.info(f"Checking file_path: {file_path}")
         logger.info(f"File exists: {os.path.isfile(file_path) if file_path else 'N/A'}")
