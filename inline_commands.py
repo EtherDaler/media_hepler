@@ -163,15 +163,23 @@ async def chosen_inline_handler(chosen: ChosenInlineResult):
     user_id = chosen.from_user.id
     inline_message_id = chosen.inline_message_id
     
+    logger.info(f"=== CHOSEN INLINE RESULT ===")
+    logger.info(f"result_id: {result_id}")
+    logger.info(f"url: {url}")
+    logger.info(f"user_id: {user_id}")
+    logger.info(f"inline_message_id: {inline_message_id}")
+    
     if not url or result_id in ['help', 'invalid']:
+        logger.info("Skipping: help or invalid result")
         return
     
     if not inline_message_id:
         # Без inline_message_id не можем редактировать
-        logger.warning("No inline_message_id received")
+        logger.warning("No inline_message_id received. Enable /setinlinefeedback in @BotFather!")
         return
     
     platform = detect_platform(url)
+    logger.info(f"Platform detected: {platform}")
     is_audio = result_id.startswith("audio_")
     
     file_path = None
