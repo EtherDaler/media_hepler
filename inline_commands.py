@@ -392,7 +392,7 @@ async def chosen_inline_handler(chosen: ChosenInlineResult):
             content_type = "аудио" if is_audio else "видео"
             await chosen.bot.send_message(
                 chat_id=DEV_CHANEL_ID,
-                text=f"✅ Inline: @{username} скачал {content_type} с {platform}\n{url} #inline"
+                text=f"✅ Inline: @{username} скачал {content_type} с {platform} #inline"
             )
         except Exception:
             pass
@@ -405,7 +405,7 @@ async def chosen_inline_handler(chosen: ChosenInlineResult):
             username = chosen.from_user.username or str(user_id)
             await chosen.bot.send_message(
                 chat_id=DEV_CHANEL_ID,
-                text=f"❌ Inline ошибка: @{username}\n{platform}: {url}\nОшибка: {str(e)[:200]} #inline_error"
+                text=f"❌ Inline ошибка: @{username} ({platform})\n{str(e)[:100]} #inline_error"
             )
         except Exception:
             pass
