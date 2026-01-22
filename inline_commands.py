@@ -201,9 +201,12 @@ async def chosen_inline_handler(chosen: ChosenInlineResult):
                 if filename:
                     file_path = f"./videos/youtube/{filename}"
             elif platform == 'instagram':
+                logger.info("Starting Instagram download...")
                 filename = await worker.download_instagram_reels(url)
+                logger.info(f"Instagram download result: {filename}")
                 if filename:
                     file_path = f"./videos/reels/{filename}"
+                    logger.info(f"File path set to: {file_path}")
             elif platform == 'tiktok':
                 downloader = worker.TikTokDownloader(save_path='videos/tiktok')
                 filename = downloader.download_video(url)
@@ -218,7 +221,11 @@ async def chosen_inline_handler(chosen: ChosenInlineResult):
                 except Exception:
                     pass
         
+        logger.info(f"Checking file_path: {file_path}")
+        logger.info(f"File exists: {os.path.isfile(file_path) if file_path else 'N/A'}")
+        
         if not file_path or not os.path.isfile(file_path):
+            logger.error(f"File not found or path is None: {file_path}")
             if can_edit_inline:
                 await chosen.bot.edit_message_text(
                     inline_message_id=inline_message_id,
@@ -232,6 +239,7 @@ async def chosen_inline_handler(chosen: ChosenInlineResult):
             return
         
         file_size = os.path.getsize(file_path)
+        logger.info(f"File size: {file_size} bytes ({file_size / 1024 / 1024:.2f} MB)")
         is_large_file = file_size > 50 * 1024 * 1024  # > 50 МБ
         
         # Загружаем файл в Telegram через личку пользователю, получаем file_id
@@ -321,11 +329,13 @@ async def chosen_inline_handler(chosen: ChosenInlineResult):
                 return
             else:
                 # Маленький файл — через aiogram
+                logger.info(f"Sending video to user {user_id}...")
                 temp_msg = await chosen.bot.send_video(
                     chat_id=user_id,
                     video=FSInputFile(file_path),
                     caption="🎥 via @django_media_helper_bot"
                 )
+                logger.info(f"Video sent! file_id: {temp_msg.video.file_id}")
                 file_id = temp_msg.video.file_id
                 temp_message_id = temp_msg.message_id
             
