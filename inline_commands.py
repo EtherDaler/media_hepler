@@ -168,6 +168,7 @@ async def chosen_inline_handler(chosen: ChosenInlineResult):
     logger.info(f"url: {url}")
     logger.info(f"user_id: {user_id}")
     logger.info(f"inline_message_id: {inline_message_id}")
+    logger.info(f"Full chosen object: {chosen.model_dump_json()}")
     
     if not url or result_id in ['help', 'invalid']:
         logger.info("Skipping: help or invalid result")
