@@ -8,7 +8,7 @@ import os
 import logging
 import asyncio
 
-from aiogram import Router
+from aiogram import Router, F
 from aiogram.types import (
     InlineQuery, 
     InlineQueryResultArticle, 
@@ -16,13 +16,19 @@ from aiogram.types import (
     ChosenInlineResult,
     FSInputFile,
     InputMediaVideo,
-    InputMediaAudio
+    InputMediaAudio,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    CallbackQuery
 )
 
 import worker
 from bot_commands import send_video_through_api, send_audio_through_api
+from data import config
 
 logger = logging.getLogger(__name__)
+
+DEV_CHANEL_ID = config.DEV_CHANEL_ID
 
 inline_router = Router()
 
@@ -122,6 +128,11 @@ async def inline_query_handler(inline_query: InlineQuery):
     
     platform_name = platform_names.get(platform, platform.capitalize())
     
+    # Inline keyboard нужна чтобы получить inline_message_id
+    loading_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⏳ Загрузка...", callback_data="loading")]
+    ])
+    
     # Вариант: Скачать видео
     results.append(
         InlineQueryResultArticle(
@@ -131,7 +142,8 @@ async def inline_query_handler(inline_query: InlineQuery):
             input_message_content=InputTextMessageContent(
                 message_text=f"⏳ Скачиваю видео с {platform_name}...",
                 parse_mode="HTML"
-            )
+            ),
+            reply_markup=loading_keyboard
         )
     )
     
@@ -145,11 +157,18 @@ async def inline_query_handler(inline_query: InlineQuery):
                 input_message_content=InputTextMessageContent(
                     message_text="⏳ Скачиваю аудио с YouTube...",
                     parse_mode="HTML"
-                )
+                ),
+                reply_markup=loading_keyboard
             )
         )
     
     await inline_query.answer(results, cache_time=60, is_personal=True)
+
+
+@inline_router.callback_query(F.data == "loading")
+async def loading_callback_handler(callback: CallbackQuery):
+    """Обработчик нажатия на кнопку загрузки"""
+    await callback.answer("⏳ Загрузка в процессе...", show_alert=False)
 
 
 @inline_router.chosen_inline_result()
@@ -367,8 +386,30 @@ async def chosen_inline_handler(chosen: ChosenInlineResult):
         
         logger.info(f"Inline download success: {platform} {'audio' if is_audio else 'video'} for user {user_id}")
         
+        # Логируем успех в DEV_CHANEL
+        try:
+            username = chosen.from_user.username or str(user_id)
+            content_type = "аудио" if is_audio else "видео"
+            await chosen.bot.send_message(
+                chat_id=DEV_CHANEL_ID,
+                text=f"✅ Inline: @{username} скачал {content_type} с {platform}\n{url} #inline"
+            )
+        except Exception:
+            pass
+        
     except Exception as e:
         logger.error(f"Inline download error: {e}", exc_info=True)
+        
+        # Логируем ошибку в DEV_CHANEL
+        try:
+            username = chosen.from_user.username or str(user_id)
+            await chosen.bot.send_message(
+                chat_id=DEV_CHANEL_ID,
+                text=f"❌ Inline ошибка: @{username}\n{platform}: {url}\nОшибка: {str(e)[:200]} #inline_error"
+            )
+        except Exception:
+            pass
+        
         try:
             error_text = "❌ Ошибка при скачивании. Попробуйте отправить ссылку боту напрямую."
             if can_edit_inline:
