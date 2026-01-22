@@ -7,6 +7,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
 from bot_commands import router as media_router
+from inline_commands import inline_router
 from middlewares import DbSessionMiddleware
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from data import config
@@ -22,6 +23,7 @@ async def main() -> None:
     dp.update.middleware(DbSessionMiddleware(session_pool=sessionmaker))
 
     dp.include_router(media_router)
+    dp.include_router(inline_router)
     await dp.start_polling(bot)
 
 
