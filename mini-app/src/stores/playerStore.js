@@ -116,65 +116,99 @@ export const usePlayerStore = defineStore('player', () => {
 
   // Media Session API - для кнопок на экране блокировки
   function setupMediaSession() {
-    if (!('mediaSession' in navigator)) return
+    if (!('mediaSession' in navigator)) {
+      console.log('Media Session API not supported')
+      return
+    }
 
-    navigator.mediaSession.setActionHandler('play', () => {
-      audio?.play()
+    // Безопасная установка обработчика
+    const setHandler = (action, handler) => {
+      try {
+        navigator.mediaSession.setActionHandler(action, handler)
+      } catch (e) {
+        console.warn(`MediaSession action "${action}" not supported:`, e)
+      }
+    }
+
+    setHandler('play', async () => {
+      try {
+        await audio?.play()
+      } catch (e) {
+        console.warn('Play failed:', e)
+      }
     })
 
-    navigator.mediaSession.setActionHandler('pause', () => {
+    setHandler('pause', () => {
       audio?.pause()
     })
 
-    navigator.mediaSession.setActionHandler('previoustrack', () => {
+    setHandler('previoustrack', () => {
       playPrev()
     })
 
-    navigator.mediaSession.setActionHandler('nexttrack', () => {
+    setHandler('nexttrack', () => {
       playNext()
     })
 
-    navigator.mediaSession.setActionHandler('seekto', (details) => {
+    setHandler('seekto', (details) => {
       if (audio && details.seekTime !== undefined) {
         audio.currentTime = details.seekTime
+        updateMediaSessionPosition()
       }
     })
 
-    navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+    setHandler('seekbackward', (details) => {
       if (audio) {
         audio.currentTime = Math.max(0, audio.currentTime - (details.seekOffset || 10))
+        updateMediaSessionPosition()
       }
     })
 
-    navigator.mediaSession.setActionHandler('seekforward', (details) => {
+    setHandler('seekforward', (details) => {
       if (audio) {
-        audio.currentTime = Math.min(audio.duration, audio.currentTime + (details.seekOffset || 10))
+        audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + (details.seekOffset || 10))
+        updateMediaSessionPosition()
       }
     })
+
+    // Для некоторых платформ (iOS) нужно также stop
+    setHandler('stop', () => {
+      audio?.pause()
+      if (audio) audio.currentTime = 0
+    })
+
+    console.log('Media Session handlers registered')
   }
 
   // Обновить метаданные Media Session
   function updateMediaSessionMetadata(track) {
     if (!('mediaSession' in navigator) || !track) return
 
-    // Создаём SVG как Data URL для обложки (некоторые системы требуют artwork)
-    const defaultArtwork = 'data:image/svg+xml,' + encodeURIComponent(`
-      <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-        <rect width="512" height="512" fill="#1a1a2e"/>
-        <circle cx="256" cy="256" r="120" fill="none" stroke="#4a4a6a" stroke-width="8"/>
-        <circle cx="256" cy="256" r="40" fill="#4a4a6a"/>
-        <path d="M220 180 L320 256 L220 332 Z" fill="#6366f1"/>
-      </svg>
-    `.trim())
+    // Используем обложку трека если есть, иначе дефолтную
+    const artworkList = []
+    
+    if (track.thumbnail_url) {
+      // Реальная обложка трека (лучше работает на iOS)
+      artworkList.push(
+        { src: track.thumbnail_url, sizes: '96x96', type: 'image/jpeg' },
+        { src: track.thumbnail_url, sizes: '128x128', type: 'image/jpeg' },
+        { src: track.thumbnail_url, sizes: '192x192', type: 'image/jpeg' },
+        { src: track.thumbnail_url, sizes: '256x256', type: 'image/jpeg' },
+        { src: track.thumbnail_url, sizes: '384x384', type: 'image/jpeg' },
+        { src: track.thumbnail_url, sizes: '512x512', type: 'image/jpeg' }
+      )
+    }
 
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title: track.title || 'Unknown',
-      artist: track.artist || 'Unknown Artist',
-      album: track.album || 'Media Helper',
-      artwork: [
-        { src: defaultArtwork, sizes: '512x512', type: 'image/svg+xml' }
-      ]
-    })
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: track.title || 'Unknown',
+        artist: track.artist || 'Unknown Artist',
+        album: track.album || 'Media Helper',
+        artwork: artworkList.length > 0 ? artworkList : undefined
+      })
+    } catch (e) {
+      console.warn('Failed to set MediaSession metadata:', e)
+    }
   }
 
   // Обновить состояние воспроизведения в Media Session
