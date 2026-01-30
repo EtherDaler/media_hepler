@@ -1,4 +1,5 @@
 import os
+import subprocess
 import worker
 import metadata
 import mimetypes
@@ -1361,6 +1362,176 @@ async def handle_voice_recognition(message: Message, state: FSMContext, session:
                 os.remove(voice_path)
             except Exception:
                 pass
+
+
+@router.message(F.video | F.video_note)
+async def handle_video_recognition(message: Message, state: FSMContext, session: AsyncSession):
+    """
+    Обработчик видео для распознавания музыки.
+    Пользователь отправляет видео — бот извлекает аудио, распознаёт и предлагает скачать.
+    """
+    user_id = message.from_user.id
+    username = message.from_user.username or str(user_id)
+    video_path = None
+    audio_path = None
+    
+    # Очищаем предыдущее состояние чтобы избежать конфликтов
+    await state.clear()
+    
+    # Получаем видео (video или video_note)
+    video = message.video or message.video_note
+    if not video:
+        return
+    
+    # Ограничение на размер файла (50 МБ)
+    if video.file_size and video.file_size > 50 * 1024 * 1024:
+        await message.reply(
+            "❌ Видео слишком большое.\n"
+            "Максимальный размер для распознавания: 50 МБ"
+        )
+        return
+    
+    await message.bot.send_chat_action(message.chat.id, ChatAction.TYPING)
+    status_msg = await message.reply("🎵 Извлекаю аудио и распознаю музыку...")
+    
+    try:
+        # Скачиваем видео
+        video_file = await message.bot.get_file(video.file_id)
+        
+        os.makedirs("./audio/recognition/", exist_ok=True)
+        video_path = f"./audio/recognition/{user_id}_{video.file_unique_id}.mp4"
+        await message.bot.download_file(video_file.file_path, video_path)
+        
+        # Извлекаем аудио из видео через ffmpeg
+        audio_path = f"./audio/recognition/{user_id}_{video.file_unique_id}.ogg"
+        
+        ffmpeg_cmd = [
+            'ffmpeg', '-i', video_path,
+            '-vn',  # Без видео
+            '-acodec', 'libopus',
+            '-b:a', '128k',
+            '-y',  # Перезаписывать
+            audio_path
+        ]
+        
+        result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+        
+        if result.returncode != 0 or not os.path.isfile(audio_path):
+            await status_msg.edit_text("❌ Не удалось извлечь аудио из видео")
+            return
+        
+        # Удаляем видео сразу после извлечения аудио
+        if video_path and os.path.isfile(video_path):
+            try:
+                os.remove(video_path)
+                video_path = None
+            except Exception:
+                pass
+        
+        # Распознаём музыку
+        recognized = await worker.recognize_music(audio_path)
+        
+        if not recognized:
+            await status_msg.edit_text(
+                "❌ Не удалось распознать музыку в видео.\n\n"
+                "Попробуйте:\n"
+                "• Видео с более громкой музыкой\n"
+                "• Видео без посторонних звуков\n"
+                "• Более длинный отрывок (5-10 секунд)"
+            )
+            return
+        
+        # Формируем сообщение с результатом (экранируем спецсимволы)
+        title = recognized['title']
+        artist = recognized['artist']
+        album = recognized.get('album') or ''
+        year = recognized.get('year') or ''
+        
+        title_escaped = escape_markdown(title)
+        artist_escaped = escape_markdown(artist)
+        album_escaped = escape_markdown(album)
+        
+        info_parts = [f"🎵 *{title_escaped}*", f"👤 {artist_escaped}"]
+        if album:
+            info_parts.append(f"💿 {album_escaped}")
+        if year:
+            info_parts.append(f"📅 {year}")
+        
+        # Кнопки действий
+        keyboard = [
+            [InlineKeyboardButton(text="⬇️ Скачать трек", callback_data="shazam_download")]
+        ]
+        
+        # Добавляем ссылки если есть
+        links_row = []
+        if recognized.get('shazam_url'):
+            links_row.append(InlineKeyboardButton(text="🎧 Shazam", url=recognized['shazam_url']))
+        if recognized.get('spotify_url'):
+            # Конвертируем spotify:track:xxx в https URL
+            spotify_uri = recognized['spotify_url']
+            if spotify_uri.startswith('spotify:track:'):
+                track_id = spotify_uri.split(':')[-1]
+                links_row.append(InlineKeyboardButton(text="🟢 Spotify", url=f"https://open.spotify.com/track/{track_id}"))
+        
+        if links_row:
+            keyboard.append(links_row)
+        
+        reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+        
+        # Сохраняем данные для скачивания
+        await state.update_data(
+            shazam_result=recognized,
+            shazam_query=recognized['youtube_query']
+        )
+        await state.set_state(ShazamState.confirm_download)
+        
+        # Отправляем результат с обложкой если есть
+        if recognized.get('cover_url'):
+            try:
+                await status_msg.delete()
+                await message.answer_photo(
+                    photo=recognized['cover_url'],
+                    caption="\n".join(info_parts),
+                    reply_markup=reply_markup,
+                    parse_mode='Markdown'
+                )
+            except Exception:
+                # Если не получилось отправить фото — отправляем текст
+                await status_msg.edit_text(
+                    "\n".join(info_parts),
+                    reply_markup=reply_markup,
+                    parse_mode='Markdown'
+                )
+        else:
+            await status_msg.edit_text(
+                "\n".join(info_parts),
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+        
+        # Логируем в dev канал (игнорируем ошибки)
+        try:
+            await message.bot.send_message(
+                chat_id=config.DEV_CHANEL_ID,
+                text=f"🎬 @{username} (ID: {user_id}) распознал из видео: {artist} - {title} #shazam_video"
+            )
+        except Exception:
+            pass
+        
+    except Exception as e:
+        logger.error(f"Error in video recognition: {e}")
+        try:
+            await status_msg.edit_text("❌ Произошла ошибка при распознавании. Попробуйте позже.")
+        except Exception:
+            pass
+    finally:
+        # Гарантированно удаляем временные файлы
+        for path in [video_path, audio_path]:
+            if path and os.path.isfile(path):
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
 
 
 @router.callback_query(F.data == "shazam_download", ShazamState.confirm_download)

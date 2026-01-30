@@ -429,6 +429,16 @@ export const usePlayerStore = defineStore('player', () => {
   // Оригинальный порядок очереди (до shuffle)
   const originalQueue = ref([])
 
+  // Fisher-Yates shuffle algorithm
+  function shuffleArray(array) {
+    const shuffled = [...array]
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+    }
+    return shuffled
+  }
+
   function toggleShuffle() {
     isShuffled.value = !isShuffled.value
     
@@ -438,20 +448,16 @@ export const usePlayerStore = defineStore('player', () => {
       // Сохраняем оригинальный порядок
       originalQueue.value = [...queue.value]
       
-      // Перемешиваем все треки кроме текущего
+      // Перемешиваем ВСЕ треки кроме текущего
       const currentTrackItem = queue.value[queueIndex.value]
-      const beforeCurrent = queue.value.slice(0, queueIndex.value)
-      const afterCurrent = queue.value.slice(queueIndex.value + 1)
+      const otherTracks = queue.value.filter((_, idx) => idx !== queueIndex.value)
       
-      // Перемешиваем треки после текущего (Fisher-Yates shuffle)
-      const toShuffle = [...afterCurrent]
-      for (let i = toShuffle.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [toShuffle[i], toShuffle[j]] = [toShuffle[j], toShuffle[i]]
-      }
+      // Перемешиваем все остальные треки
+      const shuffled = shuffleArray(otherTracks)
       
-      // Собираем новую очередь: до текущего + текущий + перемешанные
-      queue.value = [...beforeCurrent, currentTrackItem, ...toShuffle]
+      // Собираем новую очередь: текущий трек на первой позиции + перемешанные остальные
+      queue.value = [currentTrackItem, ...shuffled]
+      queueIndex.value = 0
     } else {
       // Восстанавливаем оригинальный порядок
       if (originalQueue.value.length > 0) {
@@ -463,6 +469,24 @@ export const usePlayerStore = defineStore('player', () => {
         originalQueue.value = []
       }
     }
+  }
+
+  // Запустить случайное воспроизведение плейлиста
+  async function playShuffled(tracklist) {
+    if (!tracklist || tracklist.length === 0) return
+    
+    // Перемешиваем весь список
+    const shuffled = shuffleArray(tracklist)
+    
+    // Сохраняем оригинальный порядок
+    originalQueue.value = [...tracklist]
+    isShuffled.value = true
+    
+    // Устанавливаем очередь и запускаем первый трек
+    queue.value = shuffled
+    queueIndex.value = 0
+    
+    await playTrackFromQueue(shuffled[0])
   }
 
   function handleTrackEnd() {
@@ -564,6 +588,7 @@ export const usePlayerStore = defineStore('player', () => {
     
     // Actions
     playTrack,
+    playShuffled,
     togglePlay,
     pause,
     play,

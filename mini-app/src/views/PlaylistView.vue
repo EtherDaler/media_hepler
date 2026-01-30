@@ -30,6 +30,9 @@
 
       <!-- Actions -->
       <div v-if="playlist.tracks?.length" class="actions">
+        <button class="shuffle-btn" @click="playShuffled" title="Случайное воспроизведение">
+          <IconShuffle />
+        </button>
         <button class="play-btn" @click="playAll">
           <IconPlay />
         </button>
@@ -87,6 +90,7 @@ import IconPlay from '../components/Common/icons/IconPlay.vue'
 import IconLibrary from '../components/Common/icons/IconLibrary.vue'
 import IconEdit from '../components/Common/icons/IconEdit.vue'
 import IconDelete from '../components/Common/icons/IconDelete.vue'
+import IconShuffle from '../components/Common/icons/IconShuffle.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -110,6 +114,12 @@ onMounted(async () => {
 function playAll() {
   if (playlist.value?.tracks?.length) {
     playerStore.playTrack(playlist.value.tracks[0], playlist.value.tracks)
+  }
+}
+
+function playShuffled() {
+  if (playlist.value?.tracks?.length) {
+    playerStore.playShuffled(playlist.value.tracks)
   }
 }
 
@@ -221,7 +231,31 @@ async function deletePlaylist() {
 .actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-md);
   margin-bottom: var(--spacing-lg);
+}
+
+.shuffle-btn {
+  width: 48px;
+  height: 48px;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.shuffle-btn:active {
+  background: var(--bg-highlight);
+  color: var(--accent);
+}
+
+.shuffle-btn svg {
+  width: 22px;
+  height: 22px;
 }
 
 .play-btn {

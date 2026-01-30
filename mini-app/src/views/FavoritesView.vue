@@ -12,11 +12,16 @@
     </div>
 
     <div v-else-if="tracks.length" class="content">
-      <!-- Play All Button -->
-      <button class="play-all-btn" @click="playAll">
-        <IconPlay />
-        <span>Воспроизвести</span>
-      </button>
+      <!-- Play Buttons -->
+      <div class="play-buttons">
+        <button class="play-all-btn" @click="playAll">
+          <IconPlay />
+          <span>Воспроизвести</span>
+        </button>
+        <button class="shuffle-btn" @click="playShuffled" title="Случайное воспроизведение">
+          <IconShuffle />
+        </button>
+      </div>
 
       <!-- Tracks -->
       <div class="track-list">
@@ -48,6 +53,7 @@ import TrackItem from '../components/TrackList/TrackItem.vue'
 import IconBack from '../components/Common/icons/IconBack.vue'
 import IconPlay from '../components/Common/icons/IconPlay.vue'
 import IconHeart from '../components/Common/icons/IconHeart.vue'
+import IconShuffle from '../components/Common/icons/IconShuffle.vue'
 
 const playerStore = usePlayerStore()
 const tracks = ref([])
@@ -68,6 +74,13 @@ function playAll() {
   if (tracks.value.length) {
     const audioTracks = tracks.value.map(t => t.audio)
     playerStore.playTrack(audioTracks[0], audioTracks)
+  }
+}
+
+function playShuffled() {
+  if (tracks.value.length) {
+    const audioTracks = tracks.value.map(t => t.audio)
+    playerStore.playShuffled(audioTracks)
   }
 }
 
@@ -115,23 +128,50 @@ async function handleToggleFavorite(track) {
   font-weight: 700;
 }
 
+.play-buttons {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-lg);
+}
+
 .play-all-btn {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: var(--spacing-sm);
-  width: 100%;
+  flex: 1;
   padding: var(--spacing-md);
   background: var(--accent);
   color: var(--bg-primary);
   border-radius: var(--radius-full);
   font-weight: 600;
-  margin-bottom: var(--spacing-lg);
 }
 
 .play-all-btn svg {
   width: 20px;
   height: 20px;
+}
+
+.shuffle-btn {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-full);
+  color: var(--text-primary);
+  transition: all var(--transition-fast);
+}
+
+.shuffle-btn:active {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
+.shuffle-btn svg {
+  width: 22px;
+  height: 22px;
 }
 
 .loading {
