@@ -1,17 +1,17 @@
 import asyncio
 import os
-import os
 import base64
 import yt_dlp
 import subprocess
 import fnmatch
-import subprocess
 import random
 import re
 import requests
 import json
 import logging
 import urllib
+import shutil
+import tempfile
 
 from datetime import datetime
 from typing import Optional, Dict, Any, List
@@ -120,16 +120,52 @@ def compress_video(input_path, output_path, target_size_mb=50):
         return False
     
 
+# Хранит пути к временным файлам cookies для очистки
+_temp_cookie_files = []
+
+def get_temp_cookie_copy(original_cookie_path):
+    """
+    Создаёт временную копию файла cookies, чтобы yt-dlp не портил оригинал.
+    Возвращает путь к временной копии.
+    """
+    if not original_cookie_path or not os.path.isfile(original_cookie_path):
+        return None
+    
+    try:
+        # Создаём временный файл
+        fd, tmp_path = tempfile.mkstemp(suffix='.txt', prefix='yt_cookie_')
+        os.close(fd)
+        # Копируем содержимое
+        shutil.copy2(original_cookie_path, tmp_path)
+        _temp_cookie_files.append(tmp_path)
+        return tmp_path
+    except Exception as e:
+        logger.warning(f"Failed to create temp cookie copy: {e}")
+        return original_cookie_path
+
+def cleanup_temp_cookies():
+    """Удаляет все временные файлы cookies"""
+    global _temp_cookie_files
+    for path in _temp_cookie_files:
+        try:
+            if os.path.isfile(path):
+                os.remove(path)
+        except Exception:
+            pass
+    _temp_cookie_files = []
+
+
 def get_yt_dlp_conf(path, proxy=None, player_client=["web"]):
     """
     Возвращает ydl_opts. Если proxy_url задан — он подставляется (нормализуется).
+    Использует временную копию cookies чтобы не портить оригинал.
     """
     ydl_opts = {
         'format': 'bestvideo[height<=1080]+bestaudio/bestvideo+bestaudio/best',
         'outtmpl': f'{path}/%(title)s.%(ext)s',
         'noplaylist': True,
         'verbose': False,  # уменьшаем логирование
-        'quiet': True,     # уменьшаем логирование
+        'quiet': False,    # включаем логирование для отладки
         'extractor_args': {
             'youtube': {
                 'player_client': player_client,
@@ -145,20 +181,25 @@ def get_yt_dlp_conf(path, proxy=None, player_client=["web"]):
         'nocheckcertificate': True,
         'skip_unavailable_fragments': True,
         'continue_dl': True,
-        # Разрешаем загрузку remote components для решения JS challenges
-        'enable_remote_components': ['ejs:github'],
+        # Читаем конфиг-файл yt-dlp (для --remote-components)
+        'ignoreerrors': False,
     }
     
-    # Добавляем cookies если файл существует
+    # Добавляем cookies если файл существует (используем временную копию!)
     if DEFAULT_YT_COOKIE and os.path.isfile(DEFAULT_YT_COOKIE):
-        ydl_opts['cookiefile'] = DEFAULT_YT_COOKIE
+        temp_cookie = get_temp_cookie_copy(DEFAULT_YT_COOKIE)
+        if temp_cookie:
+            ydl_opts['cookiefile'] = temp_cookie
 
     if proxy:
         proxy_url = list(proxy.keys())[0]
         proxy_cookie = proxy[proxy_url]
         p = str(proxy_url).rstrip('/')
         ydl_opts['proxy'] = p
-        ydl_opts['cookiefile'] = proxy_cookie
+        # Используем временную копию cookies для прокси тоже
+        temp_proxy_cookie = get_temp_cookie_copy(proxy_cookie)
+        if temp_proxy_cookie:
+            ydl_opts['cookiefile'] = temp_proxy_cookie
         ydl_opts['socket_timeout'] = 150
         # ставим env на всякий случай, очищаем HTTP_PROXY/HTTPS_PROXY
         os.environ['ALL_PROXY'] = p
@@ -267,7 +308,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
 
     # 1) no-proxy, web-like (пробуем разные клиенты)
     try:
-        ydl_opts = get_yt_dlp_conf(path, proxy=None, player_client=['web_creator', 'mweb', 'ios'])
+        ydl_opts = get_yt_dlp_conf(path, proxy=None, player_client=['web_creator', 'mweb', 'tv'])
         chosen_format = await get_format_for_youtube(ydl_opts, link, format_id, res)
         ydl_opts['format'] = chosen_format
         logger.info(f"Chosen format (no-proxy): {chosen_format}")
@@ -299,7 +340,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
         if proxy:
             # primary proxy attempt
             try:
-                ydl_opts_p = get_yt_dlp_conf(path, proxy=proxy, player_client=['web_creator', 'mweb', 'ios'])
+                ydl_opts_p = get_yt_dlp_conf(path, proxy=proxy, player_client=['web_creator', 'mweb', 'tv'])
                 chosen_format_p = await get_format_for_youtube(ydl_opts_p, link, format_id, res)
                 ydl_opts_p['format'] = chosen_format_p
                 logger.info(f"Chosen format (proxy): {chosen_format_p}")
@@ -321,6 +362,9 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     os.environ.pop('ALL_PROXY', None)
     os.environ.pop('HTTP_PROXY', None)
     os.environ.pop('HTTPS_PROXY', None)
+    
+    # Очищаем временные файлы cookies
+    cleanup_temp_cookies()
 
     # если успешно — формируем имя файла и возвращаем
     if result is not None:
