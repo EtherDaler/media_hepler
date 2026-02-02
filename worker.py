@@ -181,8 +181,9 @@ def get_yt_dlp_conf(path, proxy=None, player_client=["web"]):
         'nocheckcertificate': True,
         'skip_unavailable_fragments': True,
         'continue_dl': True,
-        # Читаем конфиг-файл yt-dlp (для --remote-components)
         'ignoreerrors': False,
+        # Включаем remote components для решения JS challenges (вместо --remote-components ejs:github)
+        'remote_components': 'ejs:github',
     }
     
     # Добавляем cookies если файл существует (используем временную копию!)
@@ -223,8 +224,14 @@ def extract_info_sync(opts, url, download=False):
 async def get_format_for_youtube(ydl_opts, link, format_id='best', res='720p'):
     loop = asyncio.get_running_loop()
 
+    # Копируем опции и убираем format - нам нужна только информация о форматах
+    info_opts = ydl_opts.copy()
+    info_opts.pop('format', None)  # Убираем format чтобы не было ошибки "Requested format is not available"
+    info_opts['skip_download'] = True
+    info_opts['ignore_no_formats_error'] = True  # Игнорируем ошибки форматов
+
     try:
-        info = await loop.run_in_executor(None, lambda: extract_info_sync(ydl_opts, link, download=False))
+        info = await loop.run_in_executor(None, lambda: extract_info_sync(info_opts, link, download=False))
     except (DownloadError, SSLError, Exception) as e:
         # не падаем — логируем и возвращаем fallback
         logger.warning(f"get_format_for_youtube: failed to extract info (will fallback). Error: {e}")
