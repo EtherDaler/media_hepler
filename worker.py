@@ -457,7 +457,12 @@ def get_video_formats(url: str, max_formats=5):
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
+        'age_limit': None,  # Снимаем ограничение возраста
     }
+    
+    # Проверяем наличие и валидность cookie файла
+    cookie_exists = DEFAULT_YT_COOKIE and os.path.isfile(DEFAULT_YT_COOKIE)
+    logger.info(f"get_video_formats: Cookie file exists: {cookie_exists}, path: {DEFAULT_YT_COOKIE}")
     
     # Используем временную копию куки, чтобы оригинал не перезатирался
     temp_cookie = None
@@ -465,6 +470,11 @@ def get_video_formats(url: str, max_formats=5):
         temp_cookie = get_temp_cookie_copy(DEFAULT_YT_COOKIE)
         if temp_cookie:
             ydl_opts['cookiefile'] = temp_cookie
+            logger.info(f"get_video_formats: Using temp cookie: {temp_cookie}")
+        else:
+            logger.warning("get_video_formats: Failed to create temp cookie copy!")
+    else:
+        logger.warning(f"get_video_formats: Cookie file NOT found at {DEFAULT_YT_COOKIE}")
     
     try:
         result = extract_formats(ydl_opts)
