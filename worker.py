@@ -451,15 +451,23 @@ def get_video_formats(url: str, max_formats=5):
             video_formats.sort(key=lambda x: x['quality'], reverse=True)
             return video_formats[:max_formats]
     
-    # Попытка без прокси
+    # Попытка без прокси (используем временную копию куки!)
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
-        'cookiefile': DEFAULT_YT_COOKIE
     }
     
+    # Используем временную копию куки, чтобы оригинал не перезатирался
+    temp_cookie = None
+    if DEFAULT_YT_COOKIE and os.path.isfile(DEFAULT_YT_COOKIE):
+        temp_cookie = get_temp_cookie_copy(DEFAULT_YT_COOKIE)
+        if temp_cookie:
+            ydl_opts['cookiefile'] = temp_cookie
+    
     try:
-        return extract_formats(ydl_opts)
+        result = extract_formats(ydl_opts)
+        cleanup_temp_cookies()
+        return result
     except Exception as e:
         logger.warning(f"Ошибка получения форматов без прокси: {e}. Пробуем с прокси...")
     
@@ -470,12 +478,18 @@ def get_video_formats(url: str, max_formats=5):
             proxy_url = list(proxy.keys())[0]
             proxy_cookie = proxy[proxy_url]
             ydl_opts['proxy'] = str(proxy_url).rstrip('/')
-            ydl_opts['cookiefile'] = proxy_cookie
+            # Используем временную копию прокси-куки тоже
+            temp_proxy_cookie = get_temp_cookie_copy(proxy_cookie)
+            if temp_proxy_cookie:
+                ydl_opts['cookiefile'] = temp_proxy_cookie
             ydl_opts['socket_timeout'] = 150
-            return extract_formats(ydl_opts)
+            result = extract_formats(ydl_opts)
+            cleanup_temp_cookies()
+            return result
     except Exception as e:
         logger.error(f"Ошибка получения форматов с прокси: {e}")
     
+    cleanup_temp_cookies()
     return []
 
 
@@ -900,12 +914,20 @@ def get_youtube_video_info(url):
     ydl_opts = {
         'quiet': True, 
         'no_warnings': True,
-        'cookiefile': DEFAULT_YT_COOKIE
     }
+    
+    # Используем временную копию куки, чтобы оригинал не перезатирался
+    if DEFAULT_YT_COOKIE and os.path.isfile(DEFAULT_YT_COOKIE):
+        temp_cookie = get_temp_cookie_copy(DEFAULT_YT_COOKIE)
+        if temp_cookie:
+            ydl_opts['cookiefile'] = temp_cookie
+    
     video_id = extract_video_id(url)
     video_info = None
     try:
         video_info = get_yt_info(ydl_opts, url, video_id)
+        cleanup_temp_cookies()
+        return video_info
     except Exception as e:
         logger.error(f"Got Error while get_youtube_video_info: {e}. \nTry with Proxy...")
         proxy = get_random_proxy()
@@ -913,13 +935,17 @@ def get_youtube_video_info(url):
         proxy_cookie = proxy[proxy_url]
         p = str(proxy_url).rstrip('/')
         ydl_opts['proxy'] = p
-        ydl_opts['cookiefile'] = proxy_cookie
+        # Используем временную копию прокси-куки тоже
+        temp_proxy_cookie = get_temp_cookie_copy(proxy_cookie)
+        if temp_proxy_cookie:
+            ydl_opts['cookiefile'] = temp_proxy_cookie
         ydl_opts['socket_timeout'] = 150
         # ставим env на всякий случай, очищаем HTTP_PROXY/HTTPS_PROXY
         os.environ['ALL_PROXY'] = p
         os.environ.pop('HTTP_PROXY', None)
         os.environ.pop('HTTPS_PROXY', None)
         video_info = get_yt_info(ydl_opts, url, video_id)
+        cleanup_temp_cookies()
     return video_info
 
 
