@@ -137,7 +137,7 @@ def get_yt_dlp_conf(path, proxy=None, player_client=["web"]):
         },
         'http_chunk_size': 0,   # отключаем chunked/Range-запросы
         'nopart': True,         # не использовать .part файлы
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'referer': 'https://www.youtube.com/',
         'socket_timeout': 30,
         'retries': 3,
@@ -145,8 +145,13 @@ def get_yt_dlp_conf(path, proxy=None, player_client=["web"]):
         'nocheckcertificate': True,
         'skip_unavailable_fragments': True,
         'continue_dl': True,
-        'cookiefile': DEFAULT_YT_COOKIE
+        # Разрешаем загрузку remote components для решения JS challenges
+        'enable_remote_components': ['ejs:github'],
     }
+    
+    # Добавляем cookies если файл существует
+    if DEFAULT_YT_COOKIE and os.path.isfile(DEFAULT_YT_COOKIE):
+        ydl_opts['cookiefile'] = DEFAULT_YT_COOKIE
 
     if proxy:
         proxy_url = list(proxy.keys())[0]
@@ -260,9 +265,9 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
                 backoff = min(backoff * 2, 30)
         return None
 
-    # 1) no-proxy, web-like
+    # 1) no-proxy, web-like (пробуем разные клиенты)
     try:
-        ydl_opts = get_yt_dlp_conf(path, proxy=None, player_client=['default', 'web_safari'])
+        ydl_opts = get_yt_dlp_conf(path, proxy=None, player_client=['web_creator', 'mweb', 'ios'])
         chosen_format = await get_format_for_youtube(ydl_opts, link, format_id, res)
         ydl_opts['format'] = chosen_format
         logger.info(f"Chosen format (no-proxy): {chosen_format}")
@@ -294,7 +299,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
         if proxy:
             # primary proxy attempt
             try:
-                ydl_opts_p = get_yt_dlp_conf(path, proxy=proxy, player_client=['default', 'web_safari'])
+                ydl_opts_p = get_yt_dlp_conf(path, proxy=proxy, player_client=['web_creator', 'mweb', 'ios'])
                 chosen_format_p = await get_format_for_youtube(ydl_opts_p, link, format_id, res)
                 ydl_opts_p['format'] = chosen_format_p
                 logger.info(f"Chosen format (proxy): {chosen_format_p}")
