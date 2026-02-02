@@ -115,6 +115,15 @@ async def handle_youtube_link(message: Message, state: FSMContext):
     # Получаем информацию о видео
     try:
         video_info = worker.get_youtube_video_info(url)
+        
+        # Проверяем, что video_info не None
+        if video_info is None:
+            logger.error(f"get_youtube_video_info вернул None для URL: {url}")
+            await message.answer("❌ Не удалось получить информацию о видео. Возможно, видео недоступно или требует авторизации.")
+            username = message.from_user.username
+            user_id = message.from_user.id
+            await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог получить инфо о видео (None)")
+            return
 
         # Сохраняем выбранное видео
         await state.update_data(selected_video=video_info)
