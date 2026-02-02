@@ -310,8 +310,9 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     try:
         ydl_opts = get_yt_dlp_conf(path, proxy=None, player_client=['web_creator', 'mweb', 'tv'])
         chosen_format = await get_format_for_youtube(ydl_opts, link, format_id, res)
-        ydl_opts['format'] = chosen_format
-        logger.info(f"Chosen format (no-proxy): {chosen_format}")
+        # Добавляем fallback на 'best' если выбранный формат недоступен
+        ydl_opts['format'] = f"{chosen_format}/best" if chosen_format != 'best' else 'best'
+        logger.info(f"Chosen format (no-proxy): {ydl_opts['format']}")
         result = await try_strategy(ydl_opts, tries=1)
     except Exception as e:
         logger.exception(f"Unexpected error in primary no-proxy flow: {e}")
@@ -342,8 +343,9 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
             try:
                 ydl_opts_p = get_yt_dlp_conf(path, proxy=proxy, player_client=['web_creator', 'mweb', 'tv'])
                 chosen_format_p = await get_format_for_youtube(ydl_opts_p, link, format_id, res)
-                ydl_opts_p['format'] = chosen_format_p
-                logger.info(f"Chosen format (proxy): {chosen_format_p}")
+                # Добавляем fallback на 'best' если выбранный формат недоступен
+                ydl_opts_p['format'] = f"{chosen_format_p}/best" if chosen_format_p != 'best' else 'best'
+                logger.info(f"Chosen format (proxy): {ydl_opts_p['format']}")
                 result = await try_strategy(ydl_opts_p, tries=1)
             except Exception as e:
                 logger.exception(f"Unexpected error preparing proxy attempt: {e}")
@@ -914,6 +916,9 @@ def get_youtube_video_info(url):
     ydl_opts = {
         'quiet': True, 
         'no_warnings': True,
+        'skip_download': True,  # Явно указываем что не скачиваем
+        'format': None,  # Не запрашиваем конкретный формат при получении инфо
+        'extract_flat': False,  # Нужна полная инфа, но без скачивания
     }
     
     # Используем временную копию куки, чтобы оригинал не перезатирался
@@ -930,21 +935,25 @@ def get_youtube_video_info(url):
         return video_info
     except Exception as e:
         logger.error(f"Got Error while get_youtube_video_info: {e}. \nTry with Proxy...")
-        proxy = get_random_proxy()
-        proxy_url = list(proxy.keys())[0]
-        proxy_cookie = proxy[proxy_url]
-        p = str(proxy_url).rstrip('/')
-        ydl_opts['proxy'] = p
-        # Используем временную копию прокси-куки тоже
-        temp_proxy_cookie = get_temp_cookie_copy(proxy_cookie)
-        if temp_proxy_cookie:
-            ydl_opts['cookiefile'] = temp_proxy_cookie
-        ydl_opts['socket_timeout'] = 150
-        # ставим env на всякий случай, очищаем HTTP_PROXY/HTTPS_PROXY
-        os.environ['ALL_PROXY'] = p
-        os.environ.pop('HTTP_PROXY', None)
-        os.environ.pop('HTTPS_PROXY', None)
-        video_info = get_yt_info(ydl_opts, url, video_id)
+        try:
+            proxy = get_random_proxy()
+            if proxy:
+                proxy_url = list(proxy.keys())[0]
+                proxy_cookie = proxy[proxy_url]
+                p = str(proxy_url).rstrip('/')
+                ydl_opts['proxy'] = p
+                # Используем временную копию прокси-куки тоже
+                temp_proxy_cookie = get_temp_cookie_copy(proxy_cookie)
+                if temp_proxy_cookie:
+                    ydl_opts['cookiefile'] = temp_proxy_cookie
+                ydl_opts['socket_timeout'] = 150
+                # ставим env на всякий случай, очищаем HTTP_PROXY/HTTPS_PROXY
+                os.environ['ALL_PROXY'] = p
+                os.environ.pop('HTTP_PROXY', None)
+                os.environ.pop('HTTPS_PROXY', None)
+                video_info = get_yt_info(ydl_opts, url, video_id)
+        except Exception as e2:
+            logger.error(f"Got Error with proxy too: {e2}")
         cleanup_temp_cookies()
     return video_info
 

@@ -142,6 +142,9 @@ async def handle_youtube_link(message: Message, state: FSMContext):
     except Exception as e:
         logger.error(f"Ошибка обработки ссылки: {e}")
         await message.answer("❌ Не удалось обработать ссылку.")
+        username = message.from_user.username
+        user_id = message.from_user.id
+        await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог обработать ссылку: {url}")
 
 
 async def handle_tiktok_link(message: Message):
