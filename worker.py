@@ -183,7 +183,7 @@ def get_yt_dlp_conf(path, proxy=None, player_client=["web"]):
         'continue_dl': True,
         'ignoreerrors': False,
         # Включаем remote components для решения JS challenges (вместо --remote-components ejs:github)
-        'remote_components': 'ejs:github',
+        'remote_components': ['ejs:github'],
     }
     
     # Добавляем cookies если файл существует (используем временную копию!)
