@@ -1166,6 +1166,22 @@ class TikTokDownloader:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=False)
 
+    def _get_base_opts(self, output_path: str) -> dict:
+        """Базовые опции для yt-dlp"""
+        return {
+            'outtmpl': output_path,
+            'format': 'bestvideo+bestaudio/best',
+            'noplaylist': True,
+            'quiet': False,
+            'verbose': True,
+            'merge_output_format': 'mp4',
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            },
+            'socket_timeout': 30,
+            'retries': 3,
+        }
+
     def download_video(self, video_url: str, custom_name: Optional[str] = None) -> Optional[str]:
         if not self.validate_url(video_url):
             logger.error("Error: Invalid TikTok URL")
@@ -1173,34 +1189,54 @@ class TikTokDownloader:
 
         filename = self.get_filename(video_url, custom_name)
         output_path = os.path.join(self.save_path, filename)
-
-        ydl_opts = {
-            'outtmpl': output_path,
-            # скачиваем лучший видеопоток + лучший аудиопоток, иначе возьмёт комбинированный best
-            'format': 'bestvideo+bestaudio/best',
-            'noplaylist': True,
-            'quiet': False,
-            'verbose': True,
-            #'progress_hooks': [self.progress_hook],
-            'cookiefile': '/root/media_helper/tiktok_cookie.txt',
-            # чтобы явно слить в mp4 (если нужно)
-            'merge_output_format': 'mp4',
-            # если веб-версия даёт только демо (без звука), убрать webpage_download
-            # 'extractor_args': {'tiktok': {'webpage_download': False}},
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-            }
-        }
+        
+        # 1) Попытка без прокси
+        ydl_opts = self._get_base_opts(output_path)
+        
+        # Добавляем cookies если файл существует
+        tiktok_cookie = '/root/media_helper/tiktok_cookie.txt'
+        if os.path.isfile(tiktok_cookie):
+            ydl_opts['cookiefile'] = tiktok_cookie
 
         try:
+            logger.info("TikTok: Trying download without proxy...")
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([video_url])
                 logger.info(f"\nVideo successfully downloaded: {output_path}")
             return filename
         except yt_dlp.utils.DownloadError as e:
-            logger.error(f"Error downloading video: {str(e)}")
+            logger.warning(f"TikTok download without proxy failed: {e}")
         except Exception as e:
-            logger.error(f"An unexpected error occurred: {str(e)}")
+            logger.warning(f"TikTok unexpected error without proxy: {e}")
+
+        # 2) Попытка с прокси
+        try:
+            proxy = get_random_proxy()
+            if proxy:
+                proxy_url = list(proxy.keys())[0]
+                proxy_cookie = proxy[proxy_url]
+                p = str(proxy_url).rstrip('/')
+                
+                logger.info(f"TikTok: Trying download with proxy {p}...")
+                
+                ydl_opts_proxy = self._get_base_opts(output_path)
+                ydl_opts_proxy['proxy'] = p
+                ydl_opts_proxy['socket_timeout'] = 150
+                
+                # Используем cookies от прокси если есть
+                if proxy_cookie and os.path.isfile(proxy_cookie):
+                    ydl_opts_proxy['cookiefile'] = proxy_cookie
+                elif os.path.isfile(tiktok_cookie):
+                    ydl_opts_proxy['cookiefile'] = tiktok_cookie
+                
+                with yt_dlp.YoutubeDL(ydl_opts_proxy) as ydl:
+                    ydl.download([video_url])
+                    logger.info(f"\nVideo successfully downloaded with proxy: {output_path}")
+                return filename
+        except yt_dlp.utils.DownloadError as e:
+            logger.error(f"TikTok download with proxy failed: {e}")
+        except Exception as e:
+            logger.error(f"TikTok unexpected error with proxy: {e}")
 
         return None
 
