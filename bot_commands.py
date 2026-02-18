@@ -1133,6 +1133,7 @@ async def handle_download_audio(callback: CallbackQuery, state: FSMContext, sess
                 caption="Ваше аудио готово!\n@django_media_helper_bot"
             )
             await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')} и успешно скачал аудио из #YouTube")
+            await log_download(session, user_id, 'audio', link, status=True)
             # Сохраняем аудио в БД для Mini App
             if doc:
                 await save_sent_audio(session, doc, source='youtube', source_url=link)
@@ -1147,8 +1148,10 @@ async def handle_download_audio(callback: CallbackQuery, state: FSMContext, sess
             if not api_result['success']:
                 await callback.message.edit_text("Извините, размер файла слишком большой для отправки по Telegram.")
                 await callback.message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')}, но не смог скачать аудио из #YouTube, размер файла слишком большой")
+                await log_download(session, user_id, 'audio', link, status=False)
             else:
                 await callback.message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')} и успешно скачал аудио из #YouTube")
+                await log_download(session, user_id, 'audio', link, status=True)
                 # Сохраняем аудио в БД для Mini App
                 if api_result['response']:
                     await save_audio_from_api_response(session, user_id, api_result['response'], source='youtube', source_url=link)
@@ -1156,6 +1159,7 @@ async def handle_download_audio(callback: CallbackQuery, state: FSMContext, sess
             logger.error(f"Другая ошибка при отправке: {e}")
             await callback.message.edit_text("Извините, произошла неизвестная ошибка при отправке аудио.")
             await callback.message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')}, но не смог скачать аудио из #YouTube, {e}")
+            await log_download(session, user_id, 'audio', link, status=False)
         finally:
             # Удаляем аудио файл
             if os.path.isfile(f"./audio/youtube/{filename}"):
@@ -1166,6 +1170,7 @@ async def handle_download_audio(callback: CallbackQuery, state: FSMContext, sess
     else:
         await callback.message.edit_text("Извините, произошла ошибка. Видео недоступно!")
         await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')}, но не смог скачать аудио из #YouTube")
+        await log_download(session, user_id, 'audio', link, status=False)
     
     await state.clear()
 
@@ -1233,7 +1238,7 @@ async def handle_download_video(callback: CallbackQuery, state: FSMContext, sess
 
 
 @router.callback_query(F.data.startswith("format_"), YoutubeSearchState.select_format)
-async def handle_format_selection(callback: CallbackQuery, state: FSMContext):
+async def handle_format_selection(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
     """Обработка выбора формата видео"""
     try:
         await callback.answer()
@@ -1252,7 +1257,7 @@ async def handle_format_selection(callback: CallbackQuery, state: FSMContext):
     
     if not selected_video:
         await callback.message.edit_text("❌ Ошибка: видео не выбрано.")
-        await state.clear()  # Очищаем состояние при ошибке
+        await state.clear()
         return
     
     link = f"https://www.youtube.com/watch?v={selected_video['id']}"
@@ -1277,6 +1282,7 @@ async def handle_format_selection(callback: CallbackQuery, state: FSMContext):
         try:
             doc = await callback.message.bot.send_video(callback.message.chat.id, FSInputFile(f"./videos/youtube/{filename}"), caption='Ваше видео готово!\n@django_media_helper_bot', supports_streaming=True, width=width, height=height)
             await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')} и успешно скачал видео из #YouTube")
+            await log_download(session, user_id, 'youtube', link, status=True)
             if not doc:
                 await callback.message.edit_text("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
                 await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')}, но не смог скачать видео из #YouTube")
@@ -1286,25 +1292,26 @@ async def handle_format_selection(callback: CallbackQuery, state: FSMContext):
             if not sended:
                 await callback.message.edit_text("Извините, размер файла слишком большой для отправки по Telegram.")
                 await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')}, но не смог скачать видео из #YouTube, размер файла слишком большой")
+                await log_download(session, user_id, 'youtube', link, status=False)
             else:
                 await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')} и успешно скачал видео из #YouTube")
+                await log_download(session, user_id, 'youtube', link, status=True)
         except Exception as e:
             logger.error(f"Другая ошибка при отправке: {e}")
             await callback.message.edit_text("Извините, произошла неизвестная ошибка при отправке видео.")
+            await log_download(session, user_id, 'youtube', link, status=False)
         finally:
             if os.path.isfile(f"./videos/youtube/{filename}"):
                 os.remove(f"./videos/youtube/{filename}")
     else:
         await callback.message.edit_text("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
         await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')}, но не смог скачать видео из #YouTube")
+        await log_download(session, user_id, 'youtube', link, status=False)
         try:
             if os.path.isfile(f"./videos/youtube/{filename}"):
                 os.remove(f"./videos/youtube/{filename}")
         except Exception as e:
             logger.error(e)
-        
-        # Обновляем сообщение
-        await callback.message.edit_text("✅ Видео успешно загружено!")
     
     await state.clear()
 
