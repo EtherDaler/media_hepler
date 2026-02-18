@@ -1246,7 +1246,7 @@ class TikTokDownloader:
 def add_watermark(
     input_path: str,
     output_path: Optional[str] = None,
-    text: str = "@django_media_helper_bot",
+    text: str = "tg: @django_media_helper_bot",
     fontsize: int = 20,
     opacity: float = 0.7
 ) -> Optional[str]:
@@ -1510,7 +1510,8 @@ if __name__ == "__main__":
           "input 3\nTo download reels from instagram input 4\nTo change audio on video input 5\nTo download TikTok input 6 \n"
           "To find yotube video input 7 \n"
           "To get youtube video formats input 8 \n"
-          "To download reels V2 (with auto reencode for iOS) input 9 \n")
+          "To download reels V2 (with auto reencode for iOS) input 9 \n"
+          "To test watermark on video input 10 \n")
     choise = int(input("Chose variant: "))
     if choise == 1:
         link = input("Give me the link: ")
@@ -1554,5 +1555,74 @@ if __name__ == "__main__":
             print(f"Done! Video saved to: {result}")
         else:
             print("Failed to download video")
+    elif choise == 10:
+        print("\n=== Watermark Test ===")
+        print("1. Download YouTube video with watermark")
+        print("2. Download TikTok with watermark")
+        print("3. Download Instagram Reels with watermark")
+        print("4. Add watermark to existing video file")
+        sub_choice = int(input("Choose: "))
+        
+        if sub_choice == 1:
+            link = input("Give me YouTube link: ")
+            print("Downloading video...")
+            filename = download_youtube_sync(link)
+            if filename:
+                video_path = f"./videos/youtube/{filename}"
+                print(f"Downloaded: {video_path}")
+                print("Adding watermark...")
+                result = add_watermark(video_path)
+                if result:
+                    print(f"✅ Watermarked video saved to: {result}")
+                    print(f"Original (no watermark): {video_path}")
+                else:
+                    print("❌ Failed to add watermark")
+            else:
+                print("❌ Failed to download video")
+        elif sub_choice == 2:
+            link = input("Give me TikTok link: ")
+            print("Downloading video...")
+            downloader = TikTokDownloader(save_path='videos/tiktok')
+            filename = downloader.download_video(link)
+            if filename:
+                video_path = f"./videos/tiktok/{filename}"
+                print(f"Downloaded: {video_path}")
+                print("Adding watermark...")
+                result = add_watermark(video_path)
+                if result:
+                    print(f"✅ Watermarked video saved to: {result}")
+                    print(f"Original (no watermark): {video_path}")
+                else:
+                    print("❌ Failed to add watermark")
+            else:
+                print("❌ Failed to download video")
+        elif sub_choice == 3:
+            link = input("Give me Instagram Reels link: ")
+            print("Downloading video...")
+            video_path = _download_instagram_reels_sync(link)
+            if video_path:
+                print(f"Downloaded: {video_path}")
+                print("Adding watermark...")
+                result = add_watermark(video_path)
+                if result:
+                    print(f"✅ Watermarked video saved to: {result}")
+                    print(f"Original (no watermark): {video_path}")
+                else:
+                    print("❌ Failed to add watermark")
+            else:
+                print("❌ Failed to download video")
+        elif sub_choice == 4:
+            path = input("Give me path to video file: ")
+            if os.path.isfile(path):
+                print("Adding watermark...")
+                result = add_watermark(path)
+                if result:
+                    print(f"✅ Watermarked video saved to: {result}")
+                else:
+                    print("❌ Failed to add watermark")
+            else:
+                print(f"❌ File not found: {path}")
+        else:
+            print("Invalid choice")
     else:
         print("I don`t know what u wanna do!")
