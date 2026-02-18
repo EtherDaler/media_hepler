@@ -22,8 +22,11 @@ from aiogram.types import (
     CallbackQuery
 )
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 import worker
 from bot_commands import send_video_through_api, send_audio_through_api
+from db.download_log import log_download, should_add_watermark
 from data import config
 
 logger = logging.getLogger(__name__)
@@ -172,7 +175,7 @@ async def loading_callback_handler(callback: CallbackQuery):
 
 
 @inline_router.chosen_inline_result()
-async def chosen_inline_handler(chosen: ChosenInlineResult):
+async def chosen_inline_handler(chosen: ChosenInlineResult, session: AsyncSession):
     """
     Обработчик выбранного inline результата.
     Скачивает контент и заменяет сообщение на медиафайл.
@@ -204,7 +207,13 @@ async def chosen_inline_handler(chosen: ChosenInlineResult):
     logger.info(f"Platform detected: {platform}")
     is_audio = result_id.startswith("audio_")
     
+    # Проверяем, нужен ли водяной знак (только для видео)
+    add_wm = False
+    if not is_audio:
+        add_wm = await should_add_watermark(session, user_id)
+    
     file_path = None
+    original_file_path = None
     thumbnail_path = None
     
     try:
@@ -258,6 +267,9 @@ async def chosen_inline_handler(chosen: ChosenInlineResult):
         
         if not file_path or not os.path.isfile(file_path):
             logger.error(f"File not found or path is None: {file_path}")
+            # Логируем неудачную загрузку
+            download_type = 'audio' if is_audio else platform
+            await log_download(session, user_id, download_type, url, status=False)
             if can_edit_inline:
                 await chosen.bot.edit_message_text(
                     inline_message_id=inline_message_id,
@@ -269,6 +281,12 @@ async def chosen_inline_handler(chosen: ChosenInlineResult):
                     text="❌ Не удалось скачать. Попробуйте отправить ссылку напрямую."
                 )
             return
+        
+        # Добавляем водяной знак если нужно (только для видео)
+        original_file_path = file_path
+        if add_wm and not is_audio:
+            file_path = worker.add_watermark_if_needed(file_path, add_wm)
+            logger.info(f"Watermark applied: {file_path}")
         
         file_size = os.path.getsize(file_path)
         logger.info(f"File size: {file_size} bytes ({file_size / 1024 / 1024:.2f} MB)")
@@ -386,6 +404,10 @@ async def chosen_inline_handler(chosen: ChosenInlineResult):
         
         logger.info(f"Inline download success: {platform} {'audio' if is_audio else 'video'} for user {user_id}")
         
+        # Логируем успешную загрузку в БД
+        download_type = 'audio' if is_audio else platform
+        await log_download(session, user_id, download_type, url, status=True)
+        
         # Логируем успех в DEV_CHANEL
         try:
             username = chosen.from_user.username or str(user_id)
@@ -399,6 +421,13 @@ async def chosen_inline_handler(chosen: ChosenInlineResult):
         
     except Exception as e:
         logger.error(f"Inline download error: {e}", exc_info=True)
+        
+        # Логируем ошибку в БД
+        download_type = 'audio' if is_audio else platform
+        try:
+            await log_download(session, user_id, download_type, url, status=False)
+        except Exception:
+            pass
         
         # Логируем ошибку в DEV_CHANEL
         try:
@@ -423,6 +452,12 @@ async def chosen_inline_handler(chosen: ChosenInlineResult):
         if file_path and os.path.isfile(file_path):
             try:
                 os.remove(file_path)
+            except Exception:
+                pass
+        # Удаляем оригинальный файл если был добавлен водяной знак
+        if original_file_path and original_file_path != file_path and os.path.isfile(original_file_path):
+            try:
+                os.remove(original_file_path)
             except Exception:
                 pass
         if thumbnail_path and os.path.isfile(thumbnail_path):

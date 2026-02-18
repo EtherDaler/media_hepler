@@ -1241,6 +1241,102 @@ class TikTokDownloader:
         return None
 
 
+# ==================== Watermark ====================
+
+def add_watermark(
+    input_path: str,
+    output_path: Optional[str] = None,
+    text: str = "@django_media_helper_bot",
+    fontsize: int = 20,
+    opacity: float = 0.7
+) -> Optional[str]:
+    """
+    Добавляет текстовый водяной знак на видео.
+    
+    Args:
+        input_path: Путь к исходному видео
+        output_path: Путь для сохранения (если None, создаётся автоматически)
+        text: Текст водяного знака
+        fontsize: Размер шрифта
+        opacity: Прозрачность (0.0 - 1.0)
+    
+    Returns:
+        Путь к видео с водяным знаком или None при ошибке
+    """
+    if not os.path.isfile(input_path):
+        logger.error(f"add_watermark: file not found: {input_path}")
+        return None
+    
+    if output_path is None:
+        base, ext = os.path.splitext(input_path)
+        output_path = f"{base}_wm{ext}"
+    
+    try:
+        # FFmpeg команда для добавления текста в правый нижний угол
+        cmd = [
+            'ffmpeg', '-y',
+            '-i', input_path,
+            '-vf', f"drawtext=text='{text}':fontsize={fontsize}:fontcolor=white@{opacity}:x=w-tw-10:y=h-th-10:shadowcolor=black@0.5:shadowx=1:shadowy=1",
+            '-codec:a', 'copy',
+            '-preset', 'ultrafast',
+            output_path
+        ]
+        
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+        
+        if result.returncode == 0 and os.path.isfile(output_path):
+            logger.info(f"Watermark added successfully: {output_path}")
+            return output_path
+        else:
+            logger.error(f"FFmpeg watermark failed: {result.stderr}")
+            return None
+            
+    except subprocess.TimeoutExpired:
+        logger.error("FFmpeg watermark timeout")
+        return None
+    except Exception as e:
+        logger.error(f"Error adding watermark: {e}")
+        return None
+
+
+def add_watermark_if_needed(
+    input_path: str,
+    add_watermark_flag: bool,
+    delete_original: bool = True
+) -> str:
+    """
+    Добавляет водяной знак если нужно и возвращает путь к финальному файлу.
+    
+    Args:
+        input_path: Путь к исходному видео
+        add_watermark_flag: Нужно ли добавлять водяной знак
+        delete_original: Удалять ли оригинал после добавления водяного знака
+    
+    Returns:
+        Путь к финальному видео (с водяным знаком или без)
+    """
+    if not add_watermark_flag:
+        return input_path
+    
+    watermarked_path = add_watermark(input_path)
+    
+    if watermarked_path and os.path.isfile(watermarked_path):
+        if delete_original and input_path != watermarked_path:
+            try:
+                os.remove(input_path)
+            except Exception as e:
+                logger.warning(f"Could not delete original file: {e}")
+        return watermarked_path
+    
+    # Если не получилось добавить водяной знак, возвращаем оригинал
+    return input_path
+
+
 def download_youtube_sync(link):
     return asyncio.run(download_from_youtube(link))
 

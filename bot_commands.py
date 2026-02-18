@@ -19,6 +19,7 @@ from aiogram.enums.chat_action import ChatAction
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import db_commands
 from db.audio_helper import save_sent_audio, save_audio_from_api_response
+from db.download_log import log_download, should_add_watermark, get_today_stats
 from data import config
 from models import User
 from link_handler import handle_instagram_link, handle_youtube_link, handle_pinterest_link, handle_tiktok_link
@@ -376,6 +377,57 @@ async def count_users(message: Message, session: AsyncSession) -> None:
     else:
         await message.answer("У вас нет прав!")
 
+
+@router.message(Command('stats'))
+async def stats_command(message: Message, session: AsyncSession) -> None:
+    """Статистика загрузок за сегодня (только для админов)"""
+    user = await db_commands.get_item(User, 'tg_id', message.from_user.id, message, session)
+    if user is None or not user.is_admin:
+        await message.answer("У вас нет прав!")
+        return
+    
+    # Получаем статистику
+    stats = await get_today_stats(session)
+    
+    # Формируем сообщение
+    platform_icons = {
+        'youtube': '🎬',
+        'shorts': '📱',
+        'reels': '📸',
+        'tiktok': '🎵',
+        'pinterest': '📌',
+        'audio': '🎧',
+        'instagram': '📷'
+    }
+    
+    # Заголовок
+    text = "📊 **Статистика за сегодня**\n\n"
+    
+    # DAU и общие загрузки
+    text += f"👥 DAU (уникальных пользователей): **{stats['dau']}**\n"
+    text += f"📥 Всего загрузок: **{stats['total_downloads']}**\n"
+    text += f"❌ Ошибок: **{stats['errors']}**\n\n"
+    
+    # По платформам
+    if stats['by_platform']:
+        text += "📈 **По платформам:**\n"
+        for platform, count in sorted(stats['by_platform'].items(), key=lambda x: x[1], reverse=True):
+            icon = platform_icons.get(platform, '📦')
+            text += f"  {icon} {platform}: {count}\n"
+        text += "\n"
+    else:
+        text += "📈 Загрузок пока нет\n\n"
+    
+    # Топ 3 пользователя
+    if stats['top_users']:
+        text += "🏆 **Топ 3 пользователя:**\n"
+        medals = ['🥇', '🥈', '🥉']
+        for i, (user_id, count) in enumerate(stats['top_users']):
+            medal = medals[i] if i < len(medals) else f"{i+1}."
+            text += f"  {medal} ID: `{user_id}` — {count} загрузок\n"
+    
+    await message.answer(text, parse_mode='Markdown')
+
 @router.message(Command('send_all'))
 async def send_all(message: Message, session: AsyncSession, state: FSMContext) -> None:
     user = await db_commands.get_item(User, 'tg_id', message.from_user.id, message, session)
@@ -411,44 +463,56 @@ async def get_link(message: Message, state: FSMContext, session: AsyncSession) -
     if state_info["command_type"] == 'video':
         await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)
         await message.answer("Подождите загружаем видео...")
+        
+        # Проверяем, нужен ли водяной знак
+        add_wm = await should_add_watermark(session, user_id)
+        
         try:
             filename = await worker.download_from_youtube(link)
         except Exception as e:
             logger.error(e)
             filename = None
         if filename:
-            width, height = worker.get_video_resolution_moviepy(f"./videos/youtube/{filename}")
-            file_size = os.path.getsize(f"./videos/youtube/{filename}")
+            video_path = f"./videos/youtube/{filename}"
+            # Добавляем водяной знак если нужно
+            final_path = worker.add_watermark_if_needed(video_path, add_wm)
+            
+            width, height = worker.get_video_resolution_moviepy(final_path)
+            file_size = os.path.getsize(final_path)
             logger.info(f"Размер файла: {file_size} bytes ({file_size / 1024 / 1024:.2f} MB)")
             try:
-                #reencoded_path = worker.reencode_video(f"./videos/youtube/{filename}")
-                #doc = await message.answer_video(video=video_file, caption='Ваше видео готово!\n@django_media_helper_bot')
-                doc = await message.bot.send_video(message.chat.id, FSInputFile(f"./videos/youtube/{filename}"), caption='Ваше видео готово!\n@django_media_helper_bot', supports_streaming=True, width=width, height=height)
-                #doc = await message.answer_document(document=FSInputFile(f"./videos/youtube/{filename}"), caption="Ваше видео готово!\n@django_media_helper_bot")
+                doc = await message.bot.send_video(message.chat.id, FSInputFile(final_path), caption='Ваше видео готово!\n@django_media_helper_bot', supports_streaming=True, width=width, height=height)
                 await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #YouTube")
+                await log_download(session, user_id, 'youtube', link, status=True)
                 if not doc:
                     await message.answer("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
                     await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #YouTube")
             except TelegramEntityTooLarge:
                 logger.info("Обнаружен TelegramEntityTooLarge, переходим к отправке через API")
-                sended = send_video_through_api(message.chat.id, f"./videos/youtube/{filename}", width, height)
+                sended = send_video_through_api(message.chat.id, final_path, width, height)
                 if not sended:
                     await message.answer("Извините, размер файла слишком большой для отправки по Telegram.")
                     await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #YouTube, размер файла слишком большой")
+                    await log_download(session, user_id, 'youtube', link, status=False)
                 else:
                     await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #YouTube")
+                    await log_download(session, user_id, 'youtube', link, status=True)
             except Exception as e:
                 logger.error(f"Другая ошибка при отправке: {e}")
                 await message.answer("Извините, произошла неизвестная ошибка при отправке видео.")
                 await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #YouTube, {e}")
+                await log_download(session, user_id, 'youtube', link, status=False)
             finally:
-                if os.path.isfile(f"./videos/youtube/{filename}"):
-                    os.remove(f"./videos/youtube/{filename}")
+                if os.path.isfile(final_path):
+                    os.remove(final_path)
+                if final_path != video_path and os.path.isfile(video_path):
+                    os.remove(video_path)
         else:
             await message.answer("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
             await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #YouTube")
+            await log_download(session, user_id, 'youtube', link, status=False)
             try:
-                if os.path.isfile(f"./videos/youtube/{filename}"):
+                if filename and os.path.isfile(f"./videos/youtube/{filename}"):
                     os.remove(f"./videos/youtube/{filename}")
             except Exception as e:
                 logger.error(e)
@@ -465,7 +529,6 @@ async def get_link(message: Message, state: FSMContext, session: AsyncSession) -
             filename = result['audio']
             thumbnail_path = result.get('thumbnail')
             try:
-                # Подготавливаем thumbnail если есть
                 thumbnail = FSInputFile(thumbnail_path) if thumbnail_path and os.path.isfile(thumbnail_path) else None
                 
                 doc = await message.answer_audio(
@@ -474,7 +537,7 @@ async def get_link(message: Message, state: FSMContext, session: AsyncSession) -
                     caption="Ваше аудио готово!\n@django_media_helper_bot"
                 )
                 await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал аудио из #YouTube")
-                # Сохраняем аудио в БД для Mini App
+                await log_download(session, user_id, 'audio', link, status=True)
                 if doc:
                     await save_sent_audio(session, doc, source='youtube', source_url=link)
             except TelegramEntityTooLarge:
@@ -488,84 +551,118 @@ async def get_link(message: Message, state: FSMContext, session: AsyncSession) -
                 if not api_result['success']:
                     await message.answer("Извините, размер файла слишком большой для отправки по Telegram.")
                     await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать аудио из #YouTube, размер файла слишком большой")
+                    await log_download(session, user_id, 'audio', link, status=False)
                 else:
                     await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал аудио из #YouTube")
-                    # Сохраняем аудио в БД для Mini App
+                    await log_download(session, user_id, 'audio', link, status=True)
                     if api_result['response']:
                         await save_audio_from_api_response(session, user_id, api_result['response'], source='youtube', source_url=link)
             except Exception as e:
                 logger.error(f"Другая ошибка при отправке: {e}")
                 await message.answer("Извините, произошла неизвестная ошибка при отправке аудио.")
                 await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать аудио из #YouTube, {e}")
+                await log_download(session, user_id, 'audio', link, status=False)
             finally:
-                # Удаляем аудио файл
                 if os.path.isfile(f"./audio/youtube/{filename}"):
                     os.remove(f"./audio/youtube/{filename}")
-                # Удаляем thumbnail
                 if thumbnail_path and os.path.isfile(thumbnail_path):
                     os.remove(thumbnail_path)
         else:
             await message.answer("Извините, произошла ошибка. Видео недоступно!")
             await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать аудио из #YouTube")
+            await log_download(session, user_id, 'audio', link, status=False)
     elif state_info["command_type"] == 'reel':
         await message.answer("Подождите загружаю reels...")
         await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)
+        
+        # Проверяем, нужен ли водяной знак
+        add_wm = await should_add_watermark(session, user_id)
+        
         try:
             path = await worker.download_instagram_reels(link)
         except Exception as e:
             logger.error(e)
-            filename = None
+            path = None
         if path:
-            #reencoded_path = worker.reencode_video(path)
+            # Добавляем водяной знак если нужно
+            final_path = worker.add_watermark_if_needed(path, add_wm)
+            
             try:
-                doc = await message.answer_video(video=FSInputFile(path), caption="Ваш reels готов!\n@django_media_helper_bot")
+                doc = await message.answer_video(video=FSInputFile(final_path), caption="Ваш reels готов!\n@django_media_helper_bot")
                 await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #reels")
+                await log_download(session, user_id, 'reels', link, status=True)
             except TelegramEntityTooLarge:
                 logger.info("Обнаружен TelegramEntityTooLarge, переходим к отправке через API")
-                width, height = worker.get_video_resolution_moviepy(path)
-                sended = send_video_through_api(message.chat.id, path, width, height)
+                width, height = worker.get_video_resolution_moviepy(final_path)
+                sended = send_video_through_api(message.chat.id, final_path, width, height)
                 if not sended:
                     await message.answer("Извините, размер файла слишком большой для отправки по Telegram.")
                     await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #reels, размер файла слишком большой")
+                    await log_download(session, user_id, 'reels', link, status=False)
                 else:
                     await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #reels")
+                    await log_download(session, user_id, 'reels', link, status=True)
             except Exception as e:
                 logger.error(f"Другая ошибка при отправке: {e}")
                 await message.answer("Извините, произошла неизвестная ошибка при отправке видео.")
                 await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #reels, {e}")
+                await log_download(session, user_id, 'reels', link, status=False)
             finally:
-                #if os.path.isfile(reencoded_path):
-                #    os.remove(reencoded_path)
-                if os.path.isfile(path):
+                if os.path.isfile(final_path):
+                    os.remove(final_path)
+                if final_path != path and os.path.isfile(path):
                     os.remove(path)
         else:
             await message.answer("Произошла ошибка при загрузке reels. Попробуйте воспользоваться функцией позже.")
             await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #reels")
+            await log_download(session, user_id, 'reels', link, status=False)
 
     elif state_info["command_type"] == 'pinterest':
         await message.answer("Подождите загружаем видео...")
         await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)
+        
+        # Проверяем, нужен ли водяной знак
+        add_wm = await should_add_watermark(session, user_id)
+        
         try:
             filename = pinterest.download_pin(link)
         except Exception as e:
             logger.error(e)
             filename = None
         if filename:
-            doc = await message.answer_video(video=FSInputFile(f"./videos/pinterest/{filename}.mp4"),
-                                                caption="Ваше видео готово!\n@django_media_helper_bot")
-            await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #Pinterest")
-            if doc:
-                if os.path.isfile(f"./videos/pinterest/{filename}.mp4"):
-                    os.remove(f"./videos/pinterest/{filename}.mp4")
+            video_path = f"./videos/pinterest/{filename}.mp4"
+            # Добавляем водяной знак если нужно
+            final_path = worker.add_watermark_if_needed(video_path, add_wm)
+            
+            try:
+                doc = await message.answer_video(video=FSInputFile(final_path),
+                                                    caption="Ваше видео готово!\n@django_media_helper_bot")
+                await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #Pinterest")
+                await log_download(session, user_id, 'pinterest', link, status=True)
+                if doc:
+                    if os.path.isfile(final_path):
+                        os.remove(final_path)
+                    if final_path != video_path and os.path.isfile(video_path):
+                        os.remove(video_path)
+            except Exception as e:
+                logger.error(e)
+                await log_download(session, user_id, 'pinterest', link, status=False)
+                if os.path.isfile(final_path):
+                    os.remove(final_path)
+                if final_path != video_path and os.path.isfile(video_path):
+                    os.remove(video_path)
         else:
             await message.answer("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
             await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #Pinterest")
-            if os.path.isfile(f"./videos/pinterest/{filename}.mp4"):
-                os.remove(f"./videos/pinterest/{filename}.mp4")
+            await log_download(session, user_id, 'pinterest', link, status=False)
 
     elif state_info["command_type"] == 'tiktok':
         await message.answer("Подождите загружаем видео...")
         await message.bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)
+        
+        # Проверяем, нужен ли водяной знак
+        add_wm = await should_add_watermark(session, user_id)
+        
         tiktok_downloader = worker.TikTokDownloader("./videos/tiktok")
         try:
             filename = tiktok_downloader.download_video(link)
@@ -573,22 +670,31 @@ async def get_link(message: Message, state: FSMContext, session: AsyncSession) -
             logger.error(e)
             filename = None
         if filename:
+            video_path = f"./videos/tiktok/{filename}"
+            # Добавляем водяной знак если нужно
+            final_path = worker.add_watermark_if_needed(video_path, add_wm)
+            
             try:
-                doc = await message.answer_video(video=FSInputFile(f"./videos/tiktok/{filename}"),
+                doc = await message.answer_video(video=FSInputFile(final_path),
                                                     caption="Ваш tiktok готов!\n@django_media_helper_bot")
                 await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) успешно скачал видео из #tiktok")
+                await log_download(session, user_id, 'tiktok', link, status=True)
                 if doc:
-                    if os.path.isfile(f"./videos/tiktok/{filename}"):
-                        os.remove(f"./videos/tiktok/{filename}")
+                    if os.path.isfile(final_path):
+                        os.remove(final_path)
+                    if final_path != video_path and os.path.isfile(video_path):
+                        os.remove(video_path)
             except Exception as e:
                 logger.error(e)
-                if os.path.isfile(f"./videos/tiktok/{filename}"):
-                    os.remove(f"./videos/tiktok/{filename}")
+                await log_download(session, user_id, 'tiktok', link, status=False)
+                if os.path.isfile(final_path):
+                    os.remove(final_path)
+                if final_path != video_path and os.path.isfile(video_path):
+                    os.remove(video_path)
         else:
             await message.answer("Извините, произошла ошибка. Видео недоступно, либо указана неверная ссылка!")
             await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) не смог скачать видео из #tiktok")
-            if os.path.isfile(f"./videos/tiktok/{filename}"):
-                os.remove(f"./videos/tiktok/{filename}")
+            await log_download(session, user_id, 'tiktok', link, status=False)
 
     await state.clear()
 
@@ -833,7 +939,7 @@ async def sync_audio_handler(message: Message, session: AsyncSession):
 
 
 @router.message(F.text)
-async def handle_search_query(message: Message, state: FSMContext):
+async def handle_search_query(message: Message, state: FSMContext, session: AsyncSession):
     """Обработка поискового запроса"""
 
     # Очищаем предыдущие данные перед новым поиском
@@ -848,22 +954,22 @@ async def handle_search_query(message: Message, state: FSMContext):
     username = message.from_user.username
     # Проверяем, не является ли сообщение YouTube ссылкой
     if "youtube.com" in query or "youtu.be" in query:
-        await handle_youtube_link(message, state)
+        await handle_youtube_link(message, state, session)
         return
 
     # tiktok.com, www.tiktok.com, m.tiktok.com, vm.tiktok.com, vt.tiktok.com
     if re.search(r"(?:^|\.)(tiktok\.com)$", query) or any(d in query for d in ("tiktok.com", "vm.tiktok.com", "vt.tiktok.com")):
-        await handle_tiktok_link(message)
+        await handle_tiktok_link(message, session)
         return
 
     # домены: instagram.com, www.instagram.com, instagram.reel (rare), i.instagram.com
     if "instagram.com" in query or "i.instagram.com" in query or "instagr.am" in query:
-        await handle_instagram_link(message)
+        await handle_instagram_link(message, session)
         return
 
     # домены: pinterest.com, www.pinterest.com, pin.it (short)
     if "pinterest.com" in query or "pin.it" in query:
-        await handle_pinterest_link(message)
+        await handle_pinterest_link(message, session)
         return
 
     await message.answer("🔍 Ищу видео...")

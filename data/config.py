@@ -23,3 +23,4 @@ DEFAULT_YT_COOKIE = os.environ.get("DEFAULT_YT_COOKIE")
 
 # Mini App URL (для кнопки в боте)
 MINI_APP_URL = os.environ.get("MINI_APP_URL")
+DAILY_VIDEO_LIMIT = os.environ.get("DAILY_VIDEO_LIMIT", 10)
