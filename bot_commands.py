@@ -1171,8 +1171,11 @@ async def handle_download_audio(callback: CallbackQuery, state: FSMContext, sess
 
 
 @router.callback_query(F.data == "download_video", YoutubeSearchState.select_action)
-async def handle_download_video(callback: CallbackQuery, state: FSMContext):
+async def handle_download_video(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
     """Обработка выбора загрузки видео - показ форматов"""
+    user_id = callback.from_user.id
+    username = callback.from_user.username or str(user_id)
+    
     data = await state.get_data()
     selected_video = data.get('selected_video')
     
@@ -1181,6 +1184,7 @@ async def handle_download_video(callback: CallbackQuery, state: FSMContext):
         return
     
     video_id = selected_video['id']
+    youtube_url = f"https://www.youtube.com/watch?v={video_id}"
     
     # Получаем доступные форматы
     await callback.message.edit_text("🔄 Получаю доступные форматы...")
@@ -1189,6 +1193,14 @@ async def handle_download_video(callback: CallbackQuery, state: FSMContext):
     
     if not formats:
         await callback.message.edit_text("❌ Не удалось получить форматы для этого видео.")
+        await log_download(session, user_id, 'youtube', link=youtube_url, status=False)
+        try:
+            await callback.bot.send_message(
+                chat_id=config.DEV_CHANEL_ID,
+                text=f"❌ @{username} (ID: {user_id}) не смог получить форматы для видео: {selected_video.get('title', video_id)} #YouTube #error"
+            )
+        except Exception:
+            pass
         return
     
     # Создаем клавиатуру с форматами
@@ -1376,6 +1388,13 @@ async def handle_voice_recognition(message: Message, state: FSMContext, session:
                 "• Убедиться, что музыка хорошо слышна\n"
                 "• Записать хотя бы 5-10 секунд"
             )
+            try:
+                await message.bot.send_message(
+                    chat_id=config.DEV_CHANEL_ID,
+                    text=f"❌ @{username} (ID: {user_id}) не смог распознать музыку из голосового #shazam #error"
+                )
+            except Exception:
+                pass
             return
         
         # Формируем сообщение с результатом (экранируем спецсимволы)
@@ -1461,6 +1480,13 @@ async def handle_voice_recognition(message: Message, state: FSMContext, session:
             await status_msg.edit_text("❌ Произошла ошибка при распознавании. Попробуйте позже.")
         except Exception:
             pass
+        try:
+            await message.bot.send_message(
+                chat_id=config.DEV_CHANEL_ID,
+                text=f"❌ @{username} (ID: {user_id}) ошибка при распознавании голосового: {str(e)[:100]} #shazam #error"
+            )
+        except Exception:
+            pass
     finally:
         # Гарантированно удаляем временный файл
         if voice_path and os.path.isfile(voice_path):
@@ -1524,6 +1550,13 @@ async def handle_video_recognition(message: Message, state: FSMContext, session:
         
         if result.returncode != 0 or not os.path.isfile(audio_path):
             await status_msg.edit_text("❌ Не удалось извлечь аудио из видео")
+            try:
+                await message.bot.send_message(
+                    chat_id=config.DEV_CHANEL_ID,
+                    text=f"❌ @{username} (ID: {user_id}) не удалось извлечь аудио из видео #shazam_video #error"
+                )
+            except Exception:
+                pass
             return
         
         # Удаляем видео сразу после извлечения аудио
@@ -1545,6 +1578,13 @@ async def handle_video_recognition(message: Message, state: FSMContext, session:
                 "• Видео без посторонних звуков\n"
                 "• Более длинный отрывок (5-10 секунд)"
             )
+            try:
+                await message.bot.send_message(
+                    chat_id=config.DEV_CHANEL_ID,
+                    text=f"❌ @{username} (ID: {user_id}) не смог распознать музыку из видео #shazam_video #error"
+                )
+            except Exception:
+                pass
             return
         
         # Формируем сообщение с результатом (экранируем спецсимволы)
@@ -1630,6 +1670,13 @@ async def handle_video_recognition(message: Message, state: FSMContext, session:
             await status_msg.edit_text("❌ Произошла ошибка при распознавании. Попробуйте позже.")
         except Exception:
             pass
+        try:
+            await message.bot.send_message(
+                chat_id=config.DEV_CHANEL_ID,
+                text=f"❌ @{username} (ID: {user_id}) ошибка при распознавании видео: {str(e)[:100]} #shazam_video #error"
+            )
+        except Exception:
+            pass
     finally:
         # Гарантированно удаляем временные файлы
         for path in [video_path, audio_path]:
@@ -1673,6 +1720,14 @@ async def handle_shazam_download(callback: CallbackQuery, state: FSMContext, ses
         
         if not search_results:
             await status_msg.edit_text("❌ Не удалось найти трек на YouTube")
+            await log_download(session, user_id, 'audio', link=None, status=False)
+            try:
+                await callback.message.bot.send_message(
+                    chat_id=config.DEV_CHANEL_ID,
+                    text=f"❌ @{username} (ID: {user_id}) не смог найти трек через Shazam: {query} #shazam_download #error"
+                )
+            except Exception:
+                pass
             await state.clear()
             return
         
@@ -1686,6 +1741,14 @@ async def handle_shazam_download(callback: CallbackQuery, state: FSMContext, ses
         
         if not result or not result.get('audio'):
             await status_msg.edit_text("❌ Не удалось скачать трек")
+            await log_download(session, user_id, 'audio', link=youtube_url, status=False)
+            try:
+                await callback.message.bot.send_message(
+                    chat_id=config.DEV_CHANEL_ID,
+                    text=f"❌ @{username} (ID: {user_id}) не смог скачать трек через Shazam #shazam_download #error"
+                )
+            except Exception:
+                pass
             await state.clear()
             return
         
@@ -1715,6 +1778,7 @@ async def handle_shazam_download(callback: CallbackQuery, state: FSMContext, ses
             
             # Сохраняем в библиотеку (source_url сохранит ссылку на YouTube)
             await save_sent_audio(session, doc, source='youtube', source_url=youtube_url)
+            await log_download(session, user_id, 'audio', link=youtube_url, status=True)
         else:
             # Большой файл — через локальный API
             api_result = send_audio_through_api(
@@ -1726,9 +1790,18 @@ async def handle_shazam_download(callback: CallbackQuery, state: FSMContext, ses
             
             if api_result['success']:
                 await save_audio_from_api_response(session, user_id, api_result['response'], source='youtube', source_url=youtube_url)
+                await log_download(session, user_id, 'audio', link=youtube_url, status=True)
                 await callback.message.answer(caption)
             else:
+                await log_download(session, user_id, 'audio', link=youtube_url, status=False)
                 await callback.message.answer("❌ Не удалось отправить файл")
+                try:
+                    await callback.message.bot.send_message(
+                        chat_id=config.DEV_CHANEL_ID,
+                        text=f"❌ @{username} (ID: {user_id}) не смог отправить большой файл через Shazam #shazam_download #error"
+                    )
+                except Exception:
+                    pass
         
         try:
             await status_msg.delete()
@@ -1749,6 +1822,17 @@ async def handle_shazam_download(callback: CallbackQuery, state: FSMContext, ses
         try:
             if status_msg:
                 await status_msg.edit_text("❌ Произошла ошибка при скачивании")
+        except Exception:
+            pass
+        try:
+            await log_download(session, user_id, 'audio', link=None, status=False)
+        except Exception:
+            pass
+        try:
+            await callback.message.bot.send_message(
+                chat_id=config.DEV_CHANEL_ID,
+                text=f"❌ @{username} (ID: {user_id}) ошибка при скачивании через Shazam: {str(e)[:100]} #shazam_download #error"
+            )
         except Exception:
             pass
     finally:

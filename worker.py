@@ -1193,16 +1193,19 @@ class TikTokDownloader:
         # 1) Попытка без прокси
         ydl_opts = self._get_base_opts(output_path)
         
-        # Добавляем cookies если файл существует
+        # Добавляем cookies если файл существует (используем временную копию!)
         tiktok_cookie = '/root/media_helper/tiktok_cookie.txt'
         if os.path.isfile(tiktok_cookie):
-            ydl_opts['cookiefile'] = tiktok_cookie
+            temp_cookie = get_temp_cookie_copy(tiktok_cookie)
+            if temp_cookie:
+                ydl_opts['cookiefile'] = temp_cookie
 
         try:
             logger.info("TikTok: Trying download without proxy...")
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([video_url])
                 logger.info(f"\nVideo successfully downloaded: {output_path}")
+            cleanup_temp_cookies()
             return filename
         except yt_dlp.utils.DownloadError as e:
             logger.warning(f"TikTok download without proxy failed: {e}")
@@ -1223,21 +1226,27 @@ class TikTokDownloader:
                 ydl_opts_proxy['proxy'] = p
                 ydl_opts_proxy['socket_timeout'] = 150
                 
-                # Используем cookies от прокси если есть
+                # Используем временную копию cookies от прокси
                 if proxy_cookie and os.path.isfile(proxy_cookie):
-                    ydl_opts_proxy['cookiefile'] = proxy_cookie
+                    temp_proxy_cookie = get_temp_cookie_copy(proxy_cookie)
+                    if temp_proxy_cookie:
+                        ydl_opts_proxy['cookiefile'] = temp_proxy_cookie
                 elif os.path.isfile(tiktok_cookie):
-                    ydl_opts_proxy['cookiefile'] = tiktok_cookie
+                    temp_cookie = get_temp_cookie_copy(tiktok_cookie)
+                    if temp_cookie:
+                        ydl_opts_proxy['cookiefile'] = temp_cookie
                 
                 with yt_dlp.YoutubeDL(ydl_opts_proxy) as ydl:
                     ydl.download([video_url])
                     logger.info(f"\nVideo successfully downloaded with proxy: {output_path}")
+                cleanup_temp_cookies()
                 return filename
         except yt_dlp.utils.DownloadError as e:
             logger.error(f"TikTok download with proxy failed: {e}")
         except Exception as e:
             logger.error(f"TikTok unexpected error with proxy: {e}")
 
+        cleanup_temp_cookies()
         return None
 
 
