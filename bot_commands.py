@@ -1299,6 +1299,7 @@ async def handle_format_selection(callback: CallbackQuery, state: FSMContext, se
         except Exception as e:
             logger.error(f"Другая ошибка при отправке: {e}")
             await callback.message.edit_text("Извините, произошла неизвестная ошибка при отправке видео.")
+            await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')}, но не смог скачать видео из #YouTube, {e}")
             await log_download(session, user_id, 'youtube', link, status=False)
         finally:
             if os.path.isfile(f"./videos/youtube/{filename}"):
