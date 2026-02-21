@@ -20,7 +20,7 @@ from youtube_search import YoutubeSearch
 from yt_dlp.networking.exceptions import SSLError
 from yt_dlp.utils import DownloadError
 
-from data.config import PROXYS, DEFAULT_YT_COOKIE
+from data.config import PROXYS, DEFAULT_YT_COOKIE, YT_PO_TOKEN, YT_VISITOR_DATA
 
 
 logger = logging.getLogger(__name__)
@@ -159,7 +159,21 @@ def get_yt_dlp_conf(path, proxy=None, player_client=["web"]):
     """
     Возвращает ydl_opts. Если proxy_url задан — он подставляется (нормализуется).
     Использует временную копию cookies чтобы не портить оригинал.
+    Поддерживает PO Token для обхода age-restriction.
     """
+    # Базовые extractor_args
+    youtube_args = {
+        'player_client': player_client,
+    }
+    
+    # Добавляем PO Token если есть (более стабильный чем cookies для age-restricted)
+    if YT_PO_TOKEN:
+        youtube_args['po_token'] = [f'web+{YT_PO_TOKEN}']
+        logger.info("Using YouTube PO Token for authentication")
+    if YT_VISITOR_DATA:
+        youtube_args['visitor_data'] = [YT_VISITOR_DATA]
+        logger.info("Using YouTube Visitor Data")
+    
     ydl_opts = {
         'format': 'bestvideo[height<=1080]+bestaudio/bestvideo+bestaudio/best',
         'outtmpl': f'{path}/%(title)s.%(ext)s',
@@ -167,9 +181,7 @@ def get_yt_dlp_conf(path, proxy=None, player_client=["web"]):
         'verbose': False,  # уменьшаем логирование
         'quiet': False,    # включаем логирование для отладки
         'extractor_args': {
-            'youtube': {
-                'player_client': player_client,
-            }
+            'youtube': youtube_args
         },
         'http_chunk_size': 0,   # отключаем chunked/Range-запросы
         'nopart': True,         # не использовать .part файлы
@@ -186,11 +198,15 @@ def get_yt_dlp_conf(path, proxy=None, player_client=["web"]):
         'remote_components': ['ejs:github'],
     }
     
-    # Добавляем cookies если файл существует (используем временную копию!)
+    # Логика аутентификации:
+    # - PO Token + Visitor Data = основной метод (не требует обновления)
+    # - Cookies = fallback/дополнение (могут истекать)
+    # Если PO Token есть и работает, cookies можно не использовать
     if DEFAULT_YT_COOKIE and os.path.isfile(DEFAULT_YT_COOKIE):
         temp_cookie = get_temp_cookie_copy(DEFAULT_YT_COOKIE)
         if temp_cookie:
             ydl_opts['cookiefile'] = temp_cookie
+            logger.debug(f"Using YouTube cookies: {DEFAULT_YT_COOKIE}")
 
     if proxy:
         proxy_url = list(proxy.keys())[0]

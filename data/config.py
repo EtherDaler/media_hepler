@@ -24,3 +24,8 @@ DEFAULT_YT_COOKIE = os.environ.get("DEFAULT_YT_COOKIE")
 # Mini App URL (для кнопки в боте)
 MINI_APP_URL = os.environ.get("MINI_APP_URL")
 DAILY_VIDEO_LIMIT = int(os.environ.get("DAILY_VIDEO_LIMIT", 10))
+
+# YouTube PO Token (для обхода age-restriction без cookies)
+# Получить можно через DevTools или расширение браузера
+YT_PO_TOKEN = os.environ.get("YT_PO_TOKEN")
+YT_VISITOR_DATA = os.environ.get("YT_VISITOR_DATA")
