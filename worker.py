@@ -1536,7 +1536,8 @@ if __name__ == "__main__":
           "To find yotube video input 7 \n"
           "To get youtube video formats input 8 \n"
           "To download reels V2 (with auto reencode for iOS) input 9 \n"
-          "To test watermark on video input 10 \n")
+          "To test watermark on video input 10 \n"
+          "To download Pinterest video input 11 \n")
     choise = int(input("Chose variant: "))
     if choise == 1:
         link = input("Give me the link: ")
@@ -1649,5 +1650,15 @@ if __name__ == "__main__":
                 print(f"❌ File not found: {path}")
         else:
             print("Invalid choice")
+    elif choise == 11:
+        import pinterest
+        link = input("Give me Pinterest link: ")
+        print("Downloading Pinterest video...")
+        filename = pinterest.download_pin(link)
+        if filename:
+            video_path = f"./videos/pinterest/{filename}.mp4"
+            print(f"✅ Done! Video saved to: {video_path}")
+        else:
+            print("❌ Failed to download video (might be an image pin, not a video)")
     else:
         print("I don`t know what u wanna do!")
