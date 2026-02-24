@@ -254,10 +254,12 @@ async def chosen_inline_handler(chosen: ChosenInlineResult, session: AsyncSessio
                 logger.info("Starting Pinterest download...")
                 try:
                     import pinterest
-                    filename = await pinterest.download_pinterest_video(url)
+                    import asyncio
+                    # download_pin - синхронная функция, запускаем в thread pool
+                    filename = await asyncio.to_thread(pinterest.download_pin, url)
                     logger.info(f"Pinterest download result: {filename}")
                     if filename:
-                        file_path = f"./videos/pinterest/{filename}"
+                        file_path = f"./videos/pinterest/{filename}.mp4"
                         logger.info(f"File path: {file_path}")
                 except Exception as e:
                     logger.error(f"Pinterest download error: {e}")
