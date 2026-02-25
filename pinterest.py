@@ -30,7 +30,7 @@ def download_pin(url, path='./videos/pinterest', filename=None, out_format='mp4'
         ind += 1
     
     ydl_opts = {
-        'format': 'best[ext=mp4]/best',
+        'format': 'best',
         'outtmpl': f'{path}/{filename}.%(ext)s',
         'noplaylist': True,
         'quiet': False,
