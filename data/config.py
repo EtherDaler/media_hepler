@@ -6,12 +6,20 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BOT_TOKEN = os.environ.get("TOKEN")
-DB_NAME = os.environ.get("DB_NAME")
-DB_HOST = os.environ.get("DB_HOST")
-DB_USER = os.environ.get("DB_USER")
-DB_PASS = os.environ.get("DB_PASS")
-DB_PORT = os.environ.get("DB_PORT")
+DB_NAME = os.environ.get("DB_NAME", "media_helper")
+DB_HOST = os.environ.get("DB_HOST", "localhost")
+DB_USER = os.environ.get("DB_USER", "postgres")
+DB_PASS = os.environ.get("DB_PASS", "")
+DB_PORT = os.environ.get("DB_PORT", "5432")
 DB_PATH = f"postgresql+asyncpg://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
+
+def check_db_config() -> list[str]:
+    """Проверка наличия обязательных параметров БД. Возвращает список ошибок."""
+    errors = []
+    if not DB_NAME or not DB_USER:
+        errors.append("DB_NAME и DB_USER должны быть заданы в .env")
+    return errors
 
 ADMINS = os.environ.get("ADMINS").split()
 
