@@ -477,10 +477,21 @@ def get_video_formats(url: str, max_formats=5):
             return video_formats[:max_formats]
     
     # Попытка без прокси (используем временную копию куки!)
+    youtube_args = {}
+    if YT_PO_TOKEN:
+        youtube_args['po_token'] = [f'web+{YT_PO_TOKEN}']
+        logger.info("Using YouTube PO Token for authentication")
+    if YT_VISITOR_DATA:
+        youtube_args['visitor_data'] = [YT_VISITOR_DATA]
+        logger.info("Using YouTube Visitor Data")
+        
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
         'age_limit': None,  # Снимаем ограничение возраста
+        'extractor_args': {
+            'youtube': youtube_args
+        },
     }
     
     # Проверяем наличие и валидность cookie файла
