@@ -2,12 +2,12 @@ import worker
 import logging
 import os
 import pinterest
+import re
 
 from aiogram.types import Message, FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.fsm.context import FSMContext
 from aiogram.enums.chat_action import ChatAction
 from aiogram.exceptions import TelegramEntityTooLarge
-from aiogram.utils.markdown import escape_md
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from data import config
@@ -16,6 +16,23 @@ from db.download_log import log_download, should_add_watermark
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+
+def escape_md_v2(text: str) -> str:
+    """
+    Экранирует строку для Telegram MarkdownV2.
+    Экранирует символы: _ * [ ] ( ) ~ ` > # + - = | { } . !
+    и также сначала удваивает обратные слэши.
+    """
+    if text is None:
+        return ""
+    # сначала удваиваем обратный слэш
+    text = text.replace("\\", "\\\\")
+    # список символов, которые нужно экранировать в MarkdownV2
+    to_escape = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    for ch in to_escape:
+        text = text.replace(ch, "\\" + ch)
+    return text
 
 
 async def handle_instagram_link(message: Message, session: AsyncSession):
@@ -164,9 +181,9 @@ async def handle_youtube_link(message: Message, state: FSMContext, session: Asyn
         ]
         reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
 
-        title = escape_md(video_info['title'])
-        channel = escape_md(video_info['channel'])
-        duration = escape_md(video_info['duration'])
+        title = escape_md_v2(video_info['title'])
+        channel = escape_md_v2(video_info['channel'])
+        duration = escape_md_v2(video_info['duration'])
 
         await message.answer(
             f"🎬 *Найдено видео:*\n{title}\n\n"
