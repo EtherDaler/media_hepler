@@ -484,7 +484,7 @@ def get_video_formats(url: str, max_formats=5):
     if YT_VISITOR_DATA:
         youtube_args['visitor_data'] = [YT_VISITOR_DATA]
         logger.info("Using YouTube Visitor Data")
-        
+
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
@@ -492,6 +492,8 @@ def get_video_formats(url: str, max_formats=5):
         'extractor_args': {
             'youtube': youtube_args
         },
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'referer': 'https://www.youtube.com/'
     }
     
     # Проверяем наличие и валидность cookie файла
