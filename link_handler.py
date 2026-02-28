@@ -7,6 +7,7 @@ from aiogram.types import Message, FSInputFile, InlineKeyboardButton, InlineKeyb
 from aiogram.fsm.context import FSMContext
 from aiogram.enums.chat_action import ChatAction
 from aiogram.exceptions import TelegramEntityTooLarge
+from aiogram.utils.markdown import escape_md
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from data import config
@@ -163,13 +164,17 @@ async def handle_youtube_link(message: Message, state: FSMContext, session: Asyn
         ]
         reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
 
+        title = escape_md(video_info['title'])
+        channel = escape_md(video_info['channel'])
+        duration = escape_md(video_info['duration'])
+
         await message.answer(
-            f"🎬 **Найдено видео:** {video_info['title']}\n"
-            f"📺 Канал: {video_info['channel']}\n"
-            f"⏱ Длительность: {video_info['duration']}\n\n"
+            f"🎬 *Найдено видео:*\n{title}\n\n"
+            f"📺 Канал: {channel}\n"
+            f"⏱ Длительность: {duration}\n\n"
             "Выберите действие:",
             reply_markup=reply_markup,
-            parse_mode='Markdown'
+            parse_mode='MarkdownV2'
         )
 
         await state.set_state(YoutubeSearchState.select_action)
