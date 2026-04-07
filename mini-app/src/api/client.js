@@ -181,13 +181,10 @@ export const api = {
   },
 
   /**
-   * Скачать трек с YouTube в бота и добавить в библиотеку
+   * Публичная конфигурация: имя бота для deep link (импорт через чат).
    */
-  async importYoutubeVideo(videoId) {
-    return fetchApi('/youtube/import', {
-      method: 'POST',
-      body: JSON.stringify({ video_id: videoId })
-    })
+  async getMiniAppConfig() {
+    return fetchApi('/config')
   }
 }
 

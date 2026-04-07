@@ -219,8 +219,148 @@ class YoutubeSearchState(StatesGroup):
 class ShazamState(StatesGroup):
     confirm_download = State()
 
+
+_YOUTUBE_VIDEO_ID_RE = re.compile(r"^[\w-]{11}$")
+
+
+def _is_valid_youtube_video_id(vid: str) -> bool:
+    return bool(_YOUTUBE_VIDEO_ID_RE.match(vid))
+
+
+async def deliver_youtube_audio_to_chat(
+    progress_message: Message,
+    session: AsyncSession,
+    *,
+    user_id: int,
+    username: str | None,
+    selected_video: dict,
+    search_query: str,
+) -> None:
+    """Скачать аудио с YouTube и отправить в чат; сохранить в БД для Mini App."""
+    video_id = selected_video["id"]
+    link = f"https://www.youtube.com/watch?v={video_id}"
+    await progress_message.edit_text(
+        f"⏬ Загружаю аудио...\n\n"
+        f"🎬 {selected_video['title']}\n"
+        "Пожалуйста, подождите ⏳"
+    )
+    await progress_message.bot.send_chat_action(progress_message.chat.id, ChatAction.UPLOAD_VOICE)
+    try:
+        result = await worker.get_audio_from_youtube(link)
+    except Exception as e:
+        logger.error(e)
+        result = None
+    if result:
+        filename = result["audio"]
+        thumbnail_path = result.get("thumbnail")
+        try:
+            thumbnail = FSInputFile(thumbnail_path) if thumbnail_path and os.path.isfile(thumbnail_path) else None
+
+            doc = await progress_message.answer_audio(
+                audio=FSInputFile(f"./audio/youtube/{filename}"),
+                thumbnail=thumbnail,
+                caption="Ваше аудио готово!\n@django_media_helper_bot"
+            )
+            await progress_message.bot.send_message(
+                chat_id=config.DEV_CHANEL_ID,
+                text=f"Пользователь @{username} (ID: {user_id}) искал: {search_query} и успешно скачал аудио из #YouTube"
+            )
+            await log_download(session, user_id, 'audio', link, status=True)
+            if doc:
+                await save_sent_audio(session, doc, source='youtube', source_url=link)
+        except TelegramEntityTooLarge:
+            logger.info("Обнаружен TelegramEntityTooLarge, переходим к отправке через API")
+            api_result = send_audio_through_api(
+                progress_message.chat.id,
+                f"./audio/youtube/{filename}",
+                thumbnail_path=thumbnail_path,
+                delete_after=True
+            )
+            if not api_result['success']:
+                await progress_message.edit_text("Извините, размер файла слишком большой для отправки по Telegram.")
+                await progress_message.bot.send_message(
+                    chat_id=config.DEV_CHANEL_ID,
+                    text=f"Пользователь @{username} (ID: {user_id}) искал: {search_query}, но не смог скачать аудио из #YouTube, размер файла слишком большой"
+                )
+                await log_download(session, user_id, 'audio', link, status=False)
+            else:
+                await progress_message.bot.send_message(
+                    chat_id=config.DEV_CHANEL_ID,
+                    text=f"Пользователь @{username} (ID: {user_id}) искал: {search_query} и успешно скачал аудио из #YouTube"
+                )
+                await log_download(session, user_id, 'audio', link, status=True)
+                if api_result['response']:
+                    await save_audio_from_api_response(session, user_id, api_result['response'], source='youtube', source_url=link)
+        except Exception as e:
+            logger.error(f"Другая ошибка при отправке: {e}")
+            await progress_message.edit_text("Извините, произошла неизвестная ошибка при отправке аудио.")
+            await progress_message.bot.send_message(
+                chat_id=config.DEV_CHANEL_ID,
+                text=f"Пользователь @{username} (ID: {user_id}) искал: {search_query}, но не смог скачать аудио из #YouTube, {e}"
+            )
+            await log_download(session, user_id, 'audio', link, status=False)
+        finally:
+            if os.path.isfile(f"./audio/youtube/{filename}"):
+                os.remove(f"./audio/youtube/{filename}")
+            if thumbnail_path and os.path.isfile(thumbnail_path):
+                os.remove(thumbnail_path)
+    else:
+        await progress_message.edit_text("Извините, произошла ошибка. Видео недоступно!")
+        await progress_message.bot.send_message(
+            chat_id=config.DEV_CHANEL_ID,
+            text=f"Пользователь @{username} (ID: {user_id}) искал: {search_query}, но не смог скачать аудио из #YouTube"
+        )
+        await log_download(session, user_id, 'audio', link, status=False)
+
+
+async def handle_miniapp_youtube_import(message: Message, session: AsyncSession, video_id: str) -> None:
+    """Импорт из Mini App: deep link /start impyt_<id> — та же загрузка, что и из поиска в боте."""
+    user_id = message.from_user.id
+    username = message.from_user.username
+    link = f"https://www.youtube.com/watch?v={video_id}"
+    title = video_id
+    try:
+        info = worker.get_youtube_video_info(link)
+        if info:
+            title = info.get("title") or title
+    except Exception:
+        pass
+    selected_video = {"id": video_id, "title": title}
+    status_msg = await message.answer(
+        f"⏬ Загружаю аудио...\n\n"
+        f"🎬 {title}\n"
+        "Пожалуйста, подождите ⏳"
+    )
+    await deliver_youtube_audio_to_chat(
+        progress_message=status_msg,
+        session=session,
+        user_id=user_id,
+        username=username,
+        selected_video=selected_video,
+        search_query="Mini App поиск",
+    )
+
+
 @router.message(CommandStart())
 async def command_start_handler(message: Message, session: AsyncSession) -> None:
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) > 1:
+        arg = parts[1].strip()
+        if arg.startswith("impyt_"):
+            vid = arg[6:].strip()
+            if _is_valid_youtube_video_id(vid):
+                status = True
+                user = await db_commands.get_item(User, 'tg_id', message.from_user.id, message, session)
+                if user is None:
+                    status = await db_commands.db_register_user(message, session)
+                    if status:
+                        await db_commands.get_item(User, 'tg_id', message.from_user.id, message, session)
+                if not status:
+                    await message.answer("Произошла ошибка, повторите попытку позже!")
+                    return
+                await handle_miniapp_youtube_import(message, session, vid)
+                return
+
     file = "./texts/start_text.txt"
     status = True
     user = await db_commands.get_item(User, 'tg_id', message.from_user.id, message, session)
@@ -973,76 +1113,15 @@ async def handle_download_audio(callback: CallbackQuery, state: FSMContext, sess
         await callback.message.edit_text("❌ Ошибка: видео не выбрано.")
         await state.clear()  # Очищаем состояние при ошибке
         return
-    
-    video_id = selected_video['id']
-    
-    # Меняем сообщение на "загрузка"
-    await callback.message.edit_text(
-        f"⏬ Загружаю аудио...\n\n"
-        f"🎬 {selected_video['title']}\n"
-        "Пожалуйста, подождите ⏳"
+
+    await deliver_youtube_audio_to_chat(
+        progress_message=callback.message,
+        session=session,
+        user_id=user_id,
+        username=username,
+        selected_video=selected_video,
+        search_query=data.get('search_query', ''),
     )
-    
-    # Загружаем аудио
-    link = f"https://www.youtube.com/watch?v={video_id}"
-    await callback.bot.send_chat_action(callback.message.chat.id, ChatAction.UPLOAD_VOICE)
-    try:
-        result = await worker.get_audio_from_youtube(link)
-    except Exception as e:
-        logger.error(e)
-        result = None    
-    if result:
-        filename = result['audio']
-        thumbnail_path = result.get('thumbnail')
-        try:
-            # Подготавливаем thumbnail если есть
-            thumbnail = FSInputFile(thumbnail_path) if thumbnail_path and os.path.isfile(thumbnail_path) else None
-            
-            doc = await callback.message.answer_audio(
-                audio=FSInputFile(f"./audio/youtube/{filename}"),
-                thumbnail=thumbnail,
-                caption="Ваше аудио готово!\n@django_media_helper_bot"
-            )
-            await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')} и успешно скачал аудио из #YouTube")
-            await log_download(session, user_id, 'audio', link, status=True)
-            # Сохраняем аудио в БД для Mini App
-            if doc:
-                await save_sent_audio(session, doc, source='youtube', source_url=link)
-        except TelegramEntityTooLarge:
-            logger.info("Обнаружен TelegramEntityTooLarge, переходим к отправке через API")
-            api_result = send_audio_through_api(
-                callback.message.chat.id, 
-                f"./audio/youtube/{filename}",
-                thumbnail_path=thumbnail_path,
-                delete_after=True
-            )
-            if not api_result['success']:
-                await callback.message.edit_text("Извините, размер файла слишком большой для отправки по Telegram.")
-                await callback.message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')}, но не смог скачать аудио из #YouTube, размер файла слишком большой")
-                await log_download(session, user_id, 'audio', link, status=False)
-            else:
-                await callback.message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')} и успешно скачал аудио из #YouTube")
-                await log_download(session, user_id, 'audio', link, status=True)
-                # Сохраняем аудио в БД для Mini App
-                if api_result['response']:
-                    await save_audio_from_api_response(session, user_id, api_result['response'], source='youtube', source_url=link)
-        except Exception as e:
-            logger.error(f"Другая ошибка при отправке: {e}")
-            await callback.message.edit_text("Извините, произошла неизвестная ошибка при отправке аудио.")
-            await callback.message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')}, но не смог скачать аудио из #YouTube, {e}")
-            await log_download(session, user_id, 'audio', link, status=False)
-        finally:
-            # Удаляем аудио файл
-            if os.path.isfile(f"./audio/youtube/{filename}"):
-                os.remove(f"./audio/youtube/{filename}")
-            # Удаляем thumbnail
-            if thumbnail_path and os.path.isfile(thumbnail_path):
-                os.remove(thumbnail_path)
-    else:
-        await callback.message.edit_text("Извините, произошла ошибка. Видео недоступно!")
-        await callback.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {data.get('search_query', '')}, но не смог скачать аудио из #YouTube")
-        await log_download(session, user_id, 'audio', link, status=False)
-    
     await state.clear()
 
 

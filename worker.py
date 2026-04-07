@@ -20,7 +20,7 @@ from youtube_search import YoutubeSearch
 from yt_dlp.networking.exceptions import SSLError
 from yt_dlp.utils import DownloadError
 
-from data.config import PROXYS, DEFAULT_YT_COOKIE, YT_PO_TOKEN, YT_VISITOR_DATA
+from data.config import PROXYS, DEFAULT_YT_COOKIE, YT_PO_TOKEN, YT_VISITOR_DATA, SIMPLE_PROXY
 
 
 logger = logging.getLogger(__name__)
@@ -43,10 +43,31 @@ def generate_session():
 
 
 def get_random_proxy():
-    if not PARSED_PROXYS:
-        return None
-    proxy = random.choice(PARSED_PROXYS)
-    return proxy
+    """
+    Прокси для yt-dlp: случайный из PROXY (JSON-массив { \"url\": \"cookie_path\" }).
+    Если массив пуст — используется SIMPLE_PROXY как {url: None} (куки из DEFAULT_YT_COOKIE в get_yt_dlp_conf).
+    """
+    if PARSED_PROXYS:
+        return random.choice(PARSED_PROXYS)
+    if SIMPLE_PROXY and str(SIMPLE_PROXY).strip():
+        url = str(SIMPLE_PROXY).strip().rstrip("/")
+        if not url.startswith(("http://", "https://", "socks5://", "socks5h://")):
+            url = f"http://{url}"
+        return {url: None}
+    return None
+
+
+def _all_proxy_candidates():
+    """
+    Прокси для перебора после неудачи без прокси: все из PROXY (в случайном порядке),
+    либо одна запись из SIMPLE_PROXY, если PROXY пуст.
+    """
+    if PARSED_PROXYS:
+        lst = list(PARSED_PROXYS)
+        random.shuffle(lst)
+        return lst
+    p = get_random_proxy()
+    return [p] if p else []
 
 
 def get_name_from_path(path: str):
@@ -301,9 +322,10 @@ async def get_format_for_youtube(ydl_opts, link, format_id='best', res='720p'):
 async def download_from_youtube(link, path='./videos/youtube', out_format="mp4", res="720p", format_id="best", filename=None):
     """
     Логика:
-    1) Пытаться скачать БЕЗ прокси (player_client=web).
-    2) Если всё ещё неудача — попытки повторяются с прокси (если get_random_proxy() даёт прокси).
-    Если неудача — пробовать другие clients (android_embedded, tv_embedded) без прокси.
+    1) Скачать без прокси (web_creator / mweb / tv), затем android_embedded.
+    2) Если не вышло — с прокси: все записи из PROXY (перемешанные) или SIMPLE_PROXY, для каждого —
+       те же клиенты, пока загрузка не удастся.
+    Видеофайл временно в path; после конвертации в get_audio_from_youtube исходник удаляется.
     Возвращает имя файла (строку) или None.
     """
     os.makedirs(path, exist_ok=True)
@@ -351,22 +373,21 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
             logger.exception(f"Unexpected error in no-proxy fallback: {e}")
             result = None
 
-    # 2) try with proxy(s)
+    # 2) С прокси: перебираем все из PROXY (или SIMPLE_PROXY), пока не получится скачать
     if result is None:
-        # get_random_proxy может возвращать dict или строку; поддерживаем оба варианта
-        proxy = None
         try:
-            proxy = get_random_proxy()
+            proxy_list = _all_proxy_candidates()
         except Exception as e:
-            logger.exception(f"get_random_proxy failed: {e}")
-            proxy = None
+            logger.exception(f"_all_proxy_candidates failed: {e}")
+            proxy_list = []
 
-        if proxy:
-            # primary proxy attempt
+        for proxy in proxy_list:
+            if result is not None:
+                break
+            # primary: web_creator / mweb / tv
             try:
                 ydl_opts_p = get_yt_dlp_conf(path, proxy=proxy, player_client=['web_creator', 'mweb', 'tv'])
                 chosen_format_p = await get_format_for_youtube(ydl_opts_p, link, format_id, res)
-                # Добавляем fallback на 'best' если выбранный формат недоступен
                 ydl_opts_p['format'] = f"{chosen_format_p}/best" if chosen_format_p != 'best' else 'best'
                 logger.info(f"Chosen format (proxy): {ydl_opts_p['format']}")
                 result = await try_strategy(ydl_opts_p, tries=1)
@@ -374,14 +395,13 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
                 logger.exception(f"Unexpected error preparing proxy attempt: {e}")
                 result = None
 
-            # fallback proxy client
             if result is None:
                 try:
                     ydl_opts_p2 = get_yt_dlp_conf(path, proxy=proxy, player_client=['android_embedded'])
                     ydl_opts_p2['format'] = 'best'
                     result = await try_strategy(ydl_opts_p2, tries=1)
                 except Exception as e:
-                    logger.exception(f"Unexpected error in proxy fallback: {e}")
+                    logger.exception(f"Unexpected error in proxy fallback (android_embedded): {e}")
                     result = None
 
     os.environ.pop('ALL_PROXY', None)
@@ -836,7 +856,7 @@ async def get_audio_from_youtube(link, path="./audio/youtube", out_format="mp3",
     
     # Проверка на None СРАЗУ после скачивания
     if video is None:
-        print("Произошла ошибка при загрузке видео")
+        logger.warning("get_audio_from_youtube: download_from_youtube вернул None")
         return None
     
     # Извлекаем имя файла без расширения
@@ -875,10 +895,21 @@ async def get_audio_from_youtube(link, path="./audio/youtube", out_format="mp3",
             audio = f"{output_filename}.{out_format}"
         else:
             logger.error(f"FFmpeg error: {result.stderr}")
+            # Не оставляем битый/частичный файл на диске
+            if os.path.isfile(output_file):
+                try:
+                    os.remove(output_file)
+                except OSError:
+                    pass
     except Exception as e:
         logger.error(f"Error converting to audio: {e}")
+        if os.path.isfile(output_file):
+            try:
+                os.remove(output_file)
+            except OSError:
+                pass
     finally:
-        # Удаляем видео файл в любом случае
+        # Исходное видео после конвертации не храним на сервере
         if os.path.isfile(input_file):
             os.remove(input_file)
     
