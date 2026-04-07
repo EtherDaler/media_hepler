@@ -34,7 +34,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { usePlayerStore } from './stores/playerStore'
 import MiniPlayer from './components/Player/MiniPlayer.vue'
 import FullPlayer from './components/Player/FullPlayer.vue'
@@ -42,6 +42,23 @@ import BottomNav from './components/Navigation/BottomNav.vue'
 
 const playerStore = usePlayerStore()
 const showFullPlayer = ref(false)
+
+watch(showFullPlayer, (open) => {
+  const tg = window.Telegram?.WebApp
+  if (!tg) return
+  if (open && typeof tg.disableVerticalSwipes === 'function') {
+    tg.disableVerticalSwipes()
+  } else if (!open && typeof tg.enableVerticalSwipes === 'function') {
+    tg.enableVerticalSwipes()
+  }
+})
+
+onUnmounted(() => {
+  const tg = window.Telegram?.WebApp
+  if (tg && typeof tg.enableVerticalSwipes === 'function') {
+    tg.enableVerticalSwipes()
+  }
+})
 
 // Проверяем что открыто в Telegram
 const isTelegram = computed(() => {

@@ -24,7 +24,32 @@ export function useSwipeDownDismiss(onDismiss, options = {}) {
     tracking = false
   }
 
-  return { touchStart, touchMove, touchEnd }
+  function mouseDown(e) {
+    if (e.button !== 0) return
+    startY = e.clientY
+    tracking = true
+    document.addEventListener('mousemove', mouseMove)
+    document.addEventListener('mouseup', mouseUp)
+  }
+
+  function mouseMove(e) {
+    if (!tracking) return
+    const dy = e.clientY - startY
+    if (dy > threshold) {
+      onDismiss()
+      tracking = false
+      document.removeEventListener('mousemove', mouseMove)
+      document.removeEventListener('mouseup', mouseUp)
+    }
+  }
+
+  function mouseUp() {
+    tracking = false
+    document.removeEventListener('mousemove', mouseMove)
+    document.removeEventListener('mouseup', mouseUp)
+  }
+
+  return { touchStart, touchMove, touchEnd, mouseDown, mouseMove, mouseUp }
 }
 
 /**
@@ -66,5 +91,43 @@ export function usePullDownFromTopOfScroll(scrollRef, onDismiss, options = {}) {
     tracking = false
   }
 
-  return { touchStart, touchMove, touchEnd }
+  function mouseDown(e) {
+    if (e.button !== 0) return
+    const el = scrollRef.value
+    if (!el) return
+    if (el.scrollTop > 12) return
+    const rect = el.getBoundingClientRect()
+    const localY = e.clientY - rect.top
+    if (localY > topZonePx) return
+    startY = e.clientY
+    tracking = true
+    document.addEventListener('mousemove', mouseMove)
+    document.addEventListener('mouseup', mouseUp)
+  }
+
+  function mouseMove(e) {
+    if (!tracking) return
+    const el = scrollRef.value
+    if (!el || el.scrollTop > 12) {
+      tracking = false
+      document.removeEventListener('mousemove', mouseMove)
+      document.removeEventListener('mouseup', mouseUp)
+      return
+    }
+    const dy = e.clientY - startY
+    if (dy > threshold) {
+      onDismiss()
+      tracking = false
+      document.removeEventListener('mousemove', mouseMove)
+      document.removeEventListener('mouseup', mouseUp)
+    }
+  }
+
+  function mouseUp() {
+    tracking = false
+    document.removeEventListener('mousemove', mouseMove)
+    document.removeEventListener('mouseup', mouseUp)
+  }
+
+  return { touchStart, touchMove, touchEnd, mouseDown, mouseMove, mouseUp }
 }

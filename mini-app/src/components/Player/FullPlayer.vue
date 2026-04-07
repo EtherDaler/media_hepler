@@ -7,20 +7,22 @@
       @touchstart="onPullTouchStart"
       @touchmove.passive="onPullTouchMove"
       @touchend="pullToClose.touchEnd"
+      @mousedown="onPullMouseDown"
     >
-      <div class="player-grabber-wrap" aria-hidden="true">
-        <div class="player-grabber" />
+      <div class="player-top-bar">
+        <div class="player-grabber-wrap" aria-hidden="true">
+          <div class="player-grabber" />
+        </div>
+        <header class="header">
+          <button type="button" class="close-btn" @click="$emit('close')">
+            <IconChevron class="chevron-down" />
+          </button>
+          <span class="header-title">Сейчас играет</span>
+          <button type="button" class="menu-btn" @click="showMenu = true">
+            <IconMore />
+          </button>
+        </header>
       </div>
-      <!-- Header -->
-      <header class="header">
-      <button type="button" class="close-btn" @click="$emit('close')">
-        <IconChevron class="chevron-down" />
-      </button>
-      <span class="header-title">Сейчас играет</span>
-      <button type="button" class="menu-btn" @click="showMenu = true">
-        <IconMore />
-      </button>
-    </header>
 
     <!-- Cover Art -->
     <div class="cover-section">
@@ -136,6 +138,7 @@
             @touchstart="menuSheetSwipe.touchStart"
             @touchmove.passive="menuSheetSwipe.touchMove"
             @touchend="menuSheetSwipe.touchEnd"
+            @mousedown="menuSheetSwipe.mouseDown"
           >
             <div class="menu-handle"></div>
             <button class="menu-item" @click="addToQueueNext">
@@ -204,6 +207,12 @@ function onPullTouchStart(e) {
 
 function onPullTouchMove(e) {
   pullToClose.touchMove(e)
+}
+
+function onPullMouseDown(e) {
+  const t = e.target
+  if (t.closest && t.closest('button, a, input, textarea, .progress-bar')) return
+  pullToClose.mouseDown(e)
 }
 
 const isDragging = ref(false)
@@ -318,8 +327,20 @@ function goToQueue() {
   flex-direction: column;
 }
 
-.player-grabber-wrap {
+.player-top-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   flex-shrink: 0;
+  background: var(--bg-primary);
+  margin-left: calc(-1 * var(--spacing-md));
+  margin-right: calc(-1 * var(--spacing-md));
+  padding-left: var(--spacing-md);
+  padding-right: var(--spacing-md);
+  padding-bottom: var(--spacing-xs);
+}
+
+.player-grabber-wrap {
   display: flex;
   justify-content: center;
   padding: var(--spacing-xs) 0 var(--spacing-sm);
@@ -387,7 +408,10 @@ function goToQueue() {
   align-items: center;
   justify-content: center;
   padding: var(--spacing-lg);
+  padding-top: var(--spacing-xl);
   min-height: 200px;
+  position: relative;
+  z-index: 0;
 }
 
 .cover-art {
@@ -396,7 +420,8 @@ function goToQueue() {
   aspect-ratio: 1;
   border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  isolation: isolate;
 }
 
 .cover-image {

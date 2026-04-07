@@ -4,7 +4,7 @@ import io
 import logging
 
 from aiogram import F, Router
-from aiogram.filters import Command, CommandObject
+from aiogram.filters import BaseFilter, Command, CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
@@ -41,6 +41,16 @@ class AnswerState(StatesGroup):
 
 class CookieUpdateState(StatesGroup):
     waiting_file = State()
+
+
+class NotSlashCommandFilter(BaseFilter):
+    """Текст не является командой (/...), чтобы /cancel обрабатывался глобально."""
+
+    async def __call__(self, message: Message) -> bool:
+        text = (message.text or "").strip()
+        if not text:
+            return True
+        return not text.startswith("/")
 
 
 @admin_router.message(Command("count_users"))
@@ -240,7 +250,7 @@ async def cookie_update_receive_document(message: Message, state: FSMContext) ->
     await message.answer(f"Файл cookies обновлён: `{path}`", parse_mode="Markdown")
 
 
-@admin_router.message(CookieUpdateState.waiting_file, ~Command())
+@admin_router.message(CookieUpdateState.waiting_file, NotSlashCommandFilter())
 async def cookie_update_wrong_kind(message: Message) -> None:
     await message.answer(
         "Отправьте один текстовый файл `.txt` с cookies (как **документ**). "
