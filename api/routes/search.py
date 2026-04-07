@@ -7,10 +7,11 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps import get_db, get_user_id
+from api.deps import get_current_user, get_db, get_user_id
 from api.routes.audio import get_cover_url_for_audio, get_favorite_audio_ids
 from api.schemas import AudioResponse, CombinedSearchResponse, YouTubeImportRequest, YouTubeSearchItem
-from api.telegram_upload import send_audio_to_telegram_user
+from api.telegram_upload import notify_dev_channel, send_audio_to_telegram_user
+from db.download_log import log_download
 from db.audio_commands import (
     get_audio_by_file_id,
     get_audio_by_user_and_source_url,
@@ -62,13 +63,16 @@ async def combined_search(
 @router.post("/youtube/import", response_model=AudioResponse)
 async def import_youtube_track(
     body: YouTubeImportRequest,
-    user_id: int = Depends(get_user_id),
+    user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Скачивает аудио через worker (yt-dlp + ffmpeg), отправляет пользователю через Bot API,
     сохраняет трек в БД — отображается в Mini App.
     """
+    user_id = user["id"]
+    uname = user.get("username")
+    user_label = f"@{uname} (ID: {user_id})" if uname else f"(ID: {user_id})"
     link = f"https://www.youtube.com/watch?v={body.video_id}"
 
     existing = await get_audio_by_user_and_source_url(db, user_id, link)
@@ -148,6 +152,11 @@ async def import_youtube_track(
     audio_row = await get_audio_by_file_id(db, file_id)
     if not audio_row:
         raise HTTPException(status_code=500, detail="Трек не найден в БД после сохранения")
+
+    await notify_dev_channel(
+        f"Пользователь {user_label} искал: Mini App поиск и успешно скачал аудио из #YouTube"
+    )
+    await log_download(db, user_id, "audio", link, status=True)
 
     favorite_ids = await get_favorite_audio_ids(db, user_id)
     return AudioResponse(

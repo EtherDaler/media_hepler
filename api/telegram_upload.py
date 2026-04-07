@@ -7,9 +7,36 @@ from typing import Any, Dict, Optional
 
 import requests
 
-from data.config import BOT_TOKEN, LOCAL_BOT_API_URL
+from data.config import BOT_TOKEN, DEV_CHANEL_ID, LOCAL_BOT_API_URL
 
 logger = logging.getLogger(__name__)
+
+
+def _telegram_send_message_sync(chat_id, text: str) -> None:
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    r = requests.post(
+        url,
+        json={"chat_id": chat_id, "text": text[:4096]},
+        timeout=30,
+    )
+    data = r.json()
+    if not data.get("ok"):
+        logger.warning("sendMessage failed: %s", data)
+
+
+async def notify_dev_channel(text: str) -> None:
+    """Служебное сообщение в DEV_CHANEL_ID (как уведомления из бота)."""
+    if not DEV_CHANEL_ID:
+        return
+    try:
+        cid = int(str(DEV_CHANEL_ID).strip())
+    except (TypeError, ValueError):
+        logger.warning("notify_dev_channel: invalid DEV_CHANEL_ID=%r", DEV_CHANEL_ID)
+        return
+    try:
+        await asyncio.to_thread(_telegram_send_message_sync, cid, text)
+    except Exception as e:
+        logger.warning("notify_dev_channel: %s", e)
 
 
 def _telegram_send_audio_sync(
