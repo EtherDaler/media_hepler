@@ -98,6 +98,18 @@ def _build_extractor_args(youtube_inner: dict) -> dict:
     return out
 
 
+def _core_youtube_ydl_opts() -> Dict[str, Any]:
+    """
+    Общие опции для любого YoutubeDL с YouTube: EJS (n/signature) + рантаймы.
+    Без этого get_video_formats и get_youtube_video_info падают с «Signature solving failed», хотя download настроен.
+    """
+    return {
+        "remote_components": YTDLP_REMOTE_COMPONENTS,
+        # По умолчанию в yt-dlp только deno; на серверах чаще есть node — даём fallback.
+        "js_runtimes": {"deno": {}, "node": {}},
+    }
+
+
 def find(pattern, path):
     result = []
     for root, dirs, files in os.walk(path):
@@ -299,8 +311,7 @@ def get_yt_dlp_conf(path, proxy=None, player_client=None, *, skip_po_token: bool
         'skip_unavailable_fragments': True,
         'continue_dl': True,
         'ignoreerrors': False,
-        # JS solver для n/signature (см. YTDLP_REMOTE_COMPONENTS; на сервере желателен Node.js)
-        'remote_components': YTDLP_REMOTE_COMPONENTS,
+        **_core_youtube_ydl_opts(),
     }
     
     # Логика аутентификации:
@@ -793,7 +804,8 @@ def get_video_formats(url: str, max_formats=5):
         'age_limit': None,  # Снимаем ограничение возраста
         'extractor_args': _build_extractor_args(youtube_args),
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'referer': 'https://www.youtube.com/'
+        'referer': 'https://www.youtube.com/',
+        **_core_youtube_ydl_opts(),
     }
     
     _cf = _resolve_yt_cookie_path()
@@ -1275,6 +1287,7 @@ def get_youtube_video_info(url):
         'skip_download': True,  # Явно указываем что не скачиваем
         'extract_flat': 'in_playlist',  # Для одиночных видео - полная инфа, для плейлистов - только метаданные
         'ignore_no_formats_error': True,  # Игнорируем ошибки форматов - нам нужны только метаданные
+        **_core_youtube_ydl_opts(),
     }
     if _effective_bgutil_base_url():
         ydl_opts['extractor_args'] = _build_extractor_args({})
