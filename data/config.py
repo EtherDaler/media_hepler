@@ -21,7 +21,9 @@ def check_db_config() -> list[str]:
         errors.append("DB_NAME и DB_USER должны быть заданы в .env")
     return errors
 
-ADMINS = os.environ.get("ADMINS").split()
+# Список tg_id главных админов (из .env ADMINS через пробел). Только они могут выдавать/забирать админку в БД.
+_raw_admins = os.environ.get("ADMINS") or ""
+ADMINS = [x.strip() for x in _raw_admins.split() if x.strip()]
 
 DEV_CHANEL_ID = os.environ.get("DEV_CHANEL_ID")
 
@@ -37,3 +39,6 @@ DAILY_VIDEO_LIMIT = int(os.environ.get("DAILY_VIDEO_LIMIT", 10))
 # Получить можно через DevTools или расширение браузера
 YT_PO_TOKEN = os.environ.get("YT_PO_TOKEN")
 YT_VISITOR_DATA = os.environ.get("YT_VISITOR_DATA")
+
+# Локальный Bot API (для больших файлов), например http://127.0.0.1:8081
+LOCAL_BOT_API_URL = os.environ.get("LOCAL_BOT_API_URL", "").rstrip("/")

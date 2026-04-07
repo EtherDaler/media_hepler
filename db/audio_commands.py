@@ -81,6 +81,19 @@ async def get_audio_by_file_id(session: AsyncSession, file_id: str) -> Optional[
     return result.scalars().first()
 
 
+async def get_audio_by_user_and_source_url(
+    session: AsyncSession, user_id: int, source_url: str
+) -> Optional[UserAudio]:
+    """Проверка: уже импортировано с YouTube по той же ссылке."""
+    result = await session.execute(
+        select(UserAudio).where(
+            UserAudio.user_id == user_id,
+            UserAudio.source_url == source_url,
+        ).limit(1)
+    )
+    return result.scalars().first()
+
+
 async def delete_audio(session: AsyncSession, audio_id: int) -> bool:
     """Удалить аудио (каскадно удалит из плейлистов и избранного)"""
     try:

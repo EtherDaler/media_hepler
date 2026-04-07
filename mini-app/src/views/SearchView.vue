@@ -6,7 +6,7 @@
         <input
           v-model="query"
           type="text"
-          placeholder="Поиск треков..."
+          placeholder="Треки в библиотеке и на YouTube..."
           class="search-input"
           @input="handleSearch"
         />
@@ -20,28 +20,45 @@
       <div class="skeleton-track" v-for="i in 5" :key="i"></div>
     </div>
 
-    <div v-else-if="results.length" class="results">
-      <p class="results-count">Найдено: {{ results.length }}</p>
-      <div class="track-list">
-        <TrackItem
-          v-for="track in results"
-          :key="track.id"
-          :track="track"
-          :tracklist="results"
-          @toggle-favorite="handleToggleFavorite"
-        />
-      </div>
-    </div>
+    <template v-else-if="query.trim()">
+      <section v-if="libraryTracks.length" class="section">
+        <h2 class="section-title">Из библиотеки</h2>
+        <div class="track-list">
+          <TrackItem
+            v-for="track in libraryTracks"
+            :key="'lib-' + track.id"
+            :track="track"
+            :tracklist="libraryTracks"
+            @toggle-favorite="handleToggleFavorite"
+          />
+        </div>
+      </section>
 
-    <div v-else-if="query && !isLoading" class="empty-state">
-      <IconSearch class="empty-icon" />
-      <p>Ничего не найдено</p>
-      <p class="text-secondary">Попробуйте другой запрос</p>
-    </div>
+      <section v-if="youtubeTracks.length" class="section">
+        <h2 class="section-title">YouTube</h2>
+        <p class="section-hint">До 10 мин · нажмите «+», чтобы скачать в бота и слушать здесь</p>
+        <div class="track-list">
+          <YoutubeSearchRow
+            v-for="yt in youtubeTracks"
+            :key="'yt-' + yt.video_id"
+            :item="yt"
+            :busy="importingVideoId === yt.video_id"
+            @add="handleYoutubeAdd"
+          />
+        </div>
+      </section>
+
+      <div v-if="!libraryTracks.length && !youtubeTracks.length" class="empty-state">
+        <IconSearch class="empty-icon" />
+        <p>Ничего не найдено</p>
+        <p class="text-secondary">Попробуйте другой запрос</p>
+      </div>
+    </template>
 
     <div v-else class="hint">
       <IconSearch class="hint-icon" />
       <p>Введите название трека или исполнителя</p>
+      <p class="text-secondary hint-sub">Сначала покажем совпадения из вашей библиотеки, затем релевантные ролики с YouTube</p>
     </div>
   </div>
 </template>
@@ -49,40 +66,52 @@
 <script setup>
 import { ref } from 'vue'
 import { api } from '../api/client'
+import { usePlayerStore } from '../stores/playerStore'
 import TrackItem from '../components/TrackList/TrackItem.vue'
+import YoutubeSearchRow from '../components/TrackList/YoutubeSearchRow.vue'
 import IconSearch from '../components/Common/icons/IconSearch.vue'
 import IconClear from '../components/Common/icons/IconClear.vue'
 
 const query = ref('')
-const results = ref([])
+const libraryTracks = ref([])
+const youtubeTracks = ref([])
 const isLoading = ref(false)
+const importingVideoId = ref(null)
+
+const playerStore = usePlayerStore()
+const tg = typeof window !== 'undefined' ? window.Telegram?.WebApp : null
 
 let searchTimeout = null
 
 function handleSearch() {
   clearTimeout(searchTimeout)
-  
+
   if (!query.value.trim()) {
-    results.value = []
+    libraryTracks.value = []
+    youtubeTracks.value = []
     return
   }
 
   searchTimeout = setTimeout(async () => {
     try {
       isLoading.value = true
-      const data = await api.getAudioList({ search: query.value.trim(), limit: 50 })
-      results.value = data.items
+      const data = await api.searchCombined(query.value.trim())
+      libraryTracks.value = data.library || []
+      youtubeTracks.value = data.youtube || []
     } catch (error) {
       console.error('Search failed:', error)
+      libraryTracks.value = []
+      youtubeTracks.value = []
     } finally {
       isLoading.value = false
     }
-  }, 300)
+  }, 350)
 }
 
 function clearSearch() {
   query.value = ''
-  results.value = []
+  libraryTracks.value = []
+  youtubeTracks.value = []
 }
 
 async function handleToggleFavorite(track) {
@@ -91,6 +120,24 @@ async function handleToggleFavorite(track) {
     track.is_favorite = result.is_favorite
   } catch (error) {
     console.error('Failed to toggle favorite:', error)
+  }
+}
+
+async function handleYoutubeAdd(item) {
+  importingVideoId.value = item.video_id
+  try {
+    const track = await api.importYoutubeVideo(item.video_id)
+    libraryTracks.value = [track, ...libraryTracks.value.filter((t) => t.id !== track.id)]
+    youtubeTracks.value = youtubeTracks.value.filter((y) => y.video_id !== item.video_id)
+    await playerStore.playTrack(track)
+    tg?.HapticFeedback?.notificationOccurred?.('success')
+  } catch (error) {
+    console.error('Import failed:', error)
+    const msg = error?.message || 'Не удалось добавить трек'
+    tg?.showAlert?.(msg)
+    tg?.HapticFeedback?.notificationOccurred?.('error')
+  } finally {
+    importingVideoId.value = null
   }
 }
 </script>
@@ -145,10 +192,24 @@ async function handleToggleFavorite(track) {
   height: 16px;
 }
 
-.results-count {
+.section {
+  margin-bottom: var(--spacing-xl);
+}
+
+.section-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: var(--spacing-sm);
+}
+
+.section-hint {
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
   margin-bottom: var(--spacing-md);
+  line-height: 1.4;
 }
 
 .loading {
@@ -171,6 +232,13 @@ async function handleToggleFavorite(track) {
   color: var(--text-secondary);
 }
 
+.hint-sub {
+  margin-top: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
 .empty-icon,
 .hint-icon {
   width: 48px;
@@ -179,4 +247,3 @@ async function handleToggleFavorite(track) {
   opacity: 0.3;
 }
 </style>
-

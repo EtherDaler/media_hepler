@@ -124,3 +124,31 @@ class UserStatsResponse(BaseModel):
     total_playlists: int
     total_favorites: int
 
+
+# ==================== Search (Mini App) ====================
+
+
+class YouTubeSearchItem(BaseModel):
+    video_id: str
+    title: str
+    channel: str
+    duration_seconds: int
+    duration_label: Optional[str] = None
+    thumbnail_url: str
+    music_score: float = 0.0
+
+
+class CombinedSearchResponse(BaseModel):
+    library: List[AudioResponse]
+    youtube: List[YouTubeSearchItem]
+
+
+class YouTubeImportRequest(BaseModel):
+    video_id: str = Field(..., min_length=11, max_length=11, pattern=r"^[\w-]{11}$")
+
+
+class YouTubeImportResponse(AudioResponse):
+    """Ответ после импорта — как AudioResponse (трек в библиотеке)."""
+
+    pass
+

@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_db, get_user_id
-from api.routes import audio, playlists, favorites
+from api.routes import audio, playlists, favorites, search
 from api.schemas import UserStatsResponse
 from db.audio_commands import count_user_audio, count_user_favorites
 from models import Playlist
@@ -31,6 +31,7 @@ app.add_middleware(
 app.include_router(audio.router)
 app.include_router(playlists.router)
 app.include_router(favorites.router)
+app.include_router(search.router)
 
 
 @app.get("/")

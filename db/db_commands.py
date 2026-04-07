@@ -6,7 +6,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from aiogram.types import Message
-from sqlalchemy.orm import selectinload
 
 from models import User
 from data.config import ADMINS, DEV_CHANEL_ID
@@ -62,21 +61,19 @@ async def get_item(model, field: str, value, message: Message, session: AsyncSes
         column = getattr(model, field)
         
         # Выполняем запрос с фильтрацией по полю
-        result = await session.execute(
-            select(model).where(column == value).options(selectinload("*"))
-        )
+        result = await session.execute(select(model).where(column == value))
         return result.scalars().first()
-    
+
     except AttributeError:
         # Если поле не существует в модели
         await message.answer("Произошла ошибка!")
         print(f"Поле '{field}' не существует в модели {model.__name__}")
-        return False
-    
+        return None
+
     except IntegrityError:
         await message.answer("Произошла ошибка!")
         print(f"Ошибка в подключении к бд")
-        return False
+        return None
 
 async def db_get_item_by_id(model, id: int, message: Message, session: AsyncSession):
     """Получение сущности модели"""
@@ -177,4 +174,29 @@ async def db_get_all_users(message: Message, session: AsyncSession):
     users_list = '\n'.join([f'{index+1}. {item.tg_id}' for index, item in enumerate(users)])    
     
     return users_list
-    
+
+
+async def grant_admin_by_tg_id(tg_id: int, message: Message, session: AsyncSession) -> tuple[bool, str]:
+    """Выдать is_admin=True пользователю по tg_id (создать запись при отсутствии)."""
+    user = await get_item(User, "tg_id", tg_id, message, session)
+    if user is None:
+        new_user = User(tg_id=tg_id, is_admin=True, datetime_register=datetime.now())
+        session.add(new_user)
+        try:
+            await session.commit()
+            await session.refresh(new_user)
+            return True, ""
+        except IntegrityError:
+            await session.rollback()
+            return False, "Не удалось создать пользователя (возможно, запись уже есть)."
+    ok = await update_item(User, user.id, {"is_admin": True}, message, session)
+    return (ok, "" if ok else "Не удалось обновить запись.")
+
+
+async def revoke_admin_by_tg_id(tg_id: int, message: Message, session: AsyncSession) -> tuple[bool, str]:
+    """Снять is_admin у пользователя по tg_id."""
+    user = await get_item(User, "tg_id", tg_id, message, session)
+    if user is None:
+        return False, "Пользователь с таким tg_id не найден в базе."
+    ok = await update_item(User, user.id, {"is_admin": False}, message, session)
+    return (ok, "" if ok else "Не удалось обновить запись.")

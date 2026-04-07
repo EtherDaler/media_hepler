@@ -1,14 +1,23 @@
 <template>
   <div class="full-player">
-    <!-- Scrollable Content -->
-    <div class="player-scroll-container">
+    <!-- Scrollable Content: свайп вниз от верха (когда список в начале) — свернуть плеер -->
+    <div
+      ref="scrollContainer"
+      class="player-scroll-container"
+      @touchstart="onPullTouchStart"
+      @touchmove.passive="onPullTouchMove"
+      @touchend="pullToClose.touchEnd"
+    >
+      <div class="player-grabber-wrap" aria-hidden="true">
+        <div class="player-grabber" />
+      </div>
       <!-- Header -->
       <header class="header">
-      <button class="close-btn" @click="$emit('close')">
+      <button type="button" class="close-btn" @click="$emit('close')">
         <IconChevron class="chevron-down" />
       </button>
       <span class="header-title">Сейчас играет</span>
-      <button class="menu-btn" @click="showMenu = true">
+      <button type="button" class="menu-btn" @click="showMenu = true">
         <IconMore />
       </button>
     </header>
@@ -120,8 +129,14 @@
     <!-- Menu -->
     <Teleport to="body">
       <Transition name="menu">
-        <div v-if="showMenu" class="menu-overlay" @click="showMenu = false">
-          <div class="menu" @click.stop>
+        <div v-if="showMenu" class="menu-overlay" @click.self="showMenu = false">
+          <div
+            class="menu"
+            @click.stop
+            @touchstart="menuSheetSwipe.touchStart"
+            @touchmove.passive="menuSheetSwipe.touchMove"
+            @touchend="menuSheetSwipe.touchEnd"
+          >
             <div class="menu-handle"></div>
             <button class="menu-item" @click="addToQueueNext">
               <IconNext />
@@ -142,9 +157,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePlayerStore } from '../../stores/playerStore'
+import {
+  useSwipeDownDismiss,
+  usePullDownFromTopOfScroll
+} from '../../composables/useSwipeDownDismiss'
 import { api } from '../../api/client'
 import IconMusic from '../Common/icons/IconMusic.vue'
 import IconChevron from '../Common/icons/IconChevron.vue'
@@ -165,7 +184,28 @@ const router = useRouter()
 
 const playerStore = usePlayerStore()
 const showMenu = ref(false)
+const scrollContainer = ref(null)
 const progressBar = ref(null)
+
+const pullToClose = usePullDownFromTopOfScroll(scrollContainer, () => emit('close'), {
+  threshold: 110,
+  topZonePx: 280
+})
+
+const menuSheetSwipe = useSwipeDownDismiss(() => {
+  showMenu.value = false
+}, { threshold: 85 })
+
+function onPullTouchStart(e) {
+  const t = e.target
+  if (t.closest && t.closest('button, a, input, textarea, .progress-bar')) return
+  pullToClose.touchStart(e)
+}
+
+function onPullTouchMove(e) {
+  pullToClose.touchMove(e)
+}
+
 const isDragging = ref(false)
 const dragProgress = ref(0)
 const dragTime = ref(0)
@@ -276,6 +316,22 @@ function goToQueue() {
   z-index: 150;
   display: flex;
   flex-direction: column;
+}
+
+.player-grabber-wrap {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  padding: var(--spacing-xs) 0 var(--spacing-sm);
+  margin-top: 2px;
+}
+
+.player-grabber {
+  width: 40px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--text-muted);
+  opacity: 0.4;
 }
 
 .player-scroll-container {

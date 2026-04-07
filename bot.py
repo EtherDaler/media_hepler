@@ -6,6 +6,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
+from admin_commands import admin_router
 from bot_commands import router as media_router
 from inline_commands import inline_router
 from middlewares import DbSessionMiddleware
@@ -51,6 +52,7 @@ async def main() -> None:
     sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
     dp.update.middleware(DbSessionMiddleware(session_pool=sessionmaker))
 
+    dp.include_router(admin_router)
     dp.include_router(media_router)
     dp.include_router(inline_router)
     await dp.start_polling(bot)

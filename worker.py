@@ -438,15 +438,163 @@ class YoutubeSearchWithProxy(YoutubeSearch):
         return results
 
 
-def search_videos(query, max_results=8):
-    """Поиск видео по запросу"""
+def search_videos(query, max_results=10):
+    """
+    Поиск видео по запросу (сырой вывод youtube-search, без фильтров и эвристик).
+    Используется в Telegram-боте. Для Mini App — только search_youtube_music_candidates.
+    """
     try:
-        proxy = list(get_random_proxy().keys())[0]
-        results = YoutubeSearchWithProxy(query, max_results=max_results, proxy=proxy).to_dict()
+        rp = get_random_proxy()
+        if rp:
+            proxy = list(rp.keys())[0]
+            results = YoutubeSearchWithProxy(query, max_results=max_results, proxy=proxy).to_dict()
+        else:
+            results = YoutubeSearch(query, max_results=max_results).to_dict()
         return results
     except Exception as e:
         logging.error(f"Ошибка поиска: {e}")
+        try:
+            return YoutubeSearch(query, max_results=max_results).to_dict()
+        except Exception as e2:
+            logging.error(f"Повтор поиска без прокси не удался: {e2}")
+            return []
+
+
+def parse_youtube_duration_to_seconds(duration_str: Optional[str]) -> Optional[int]:
+    """
+    Парсит строку длительности из youtube-search (например '3:45', '1:23:45') в секунды.
+    """
+    if not duration_str or not isinstance(duration_str, str):
+        return None
+    s = duration_str.strip()
+    if not s:
+        return None
+    parts = s.replace(" ", "").split(":")
+    try:
+        nums = [int(p) for p in parts if p.isdigit()]
+    except ValueError:
+        return None
+    if not nums:
+        return None
+    if len(nums) == 1:
+        return nums[0]
+    if len(nums) == 2:
+        return nums[0] * 60 + nums[1]
+    if len(nums) == 3:
+        return nums[0] * 3600 + nums[1] * 60 + nums[2]
+    return None
+
+
+def score_youtube_music_candidate(
+    title: str,
+    channel: str,
+    duration_sec: Optional[int],
+) -> float:
+    """
+    Эвристика «похоже на трек»: буст official audio / lyrics, штраф подкастам, миксам, шортам.
+    """
+    t = (title or "").lower()
+    c = (channel or "").lower()
+    text = f"{t} {c}"
+    score = 0.0
+
+    if "official audio" in t:
+        score += 4.0
+    elif "audio only" in t or ("audio" in t and "video" not in t):
+        score += 1.5
+    if "lyric" in t or "lyrics" in t:
+        score += 2.0
+    if "official video" in t or ("official" in t and "video" in t):
+        score += 1.5
+    if "topic" in c:
+        score += 1.0
+
+    if "#short" in t or "shorts" in t:
+        score -= 4.0
+    if any(x in text for x in ("podcast", "full album", "full mix", "live stream", "live concert", "compilation", "mix -", "mixtape", "radio show", "audiobook")):
+        score -= 3.0
+    if "hour" in t and any(ch.isdigit() for ch in t):
+        score -= 2.0
+
+    if duration_sec is not None:
+        if duration_sec < 40:
+            score -= 2.0
+        elif 90 <= duration_sec <= 420:
+            score += 1.0
+        elif duration_sec > 480:
+            score -= 0.5
+
+    return score
+
+
+def _fetch_youtube_search_raw(query: str, max_fetch: int) -> List[Dict[str, Any]]:
+    """Сырые результаты youtube-search (с прокси или без)."""
+    try:
+        rp = get_random_proxy()
+        if rp:
+            proxy = list(rp.keys())[0]
+            return YoutubeSearchWithProxy(query, max_results=max_fetch, proxy=proxy).to_dict()
+        return YoutubeSearch(query, max_results=max_fetch).to_dict()
+    except Exception as e:
+        logger.warning(f"YouTube search (proxied) failed: {e}, retry without proxy")
+        try:
+            return YoutubeSearch(query, max_results=max_fetch).to_dict()
+        except Exception as e2:
+            logger.error(f"YouTube search failed: {e2}")
+            return []
+
+
+def search_youtube_music_candidates(
+    query: str,
+    max_results: int = 20,
+    max_duration_sec: int = 600,
+    fetch_cap: int = 50,
+) -> List[Dict[str, Any]]:
+    """
+    Только для Mini App API: фильтр по длительности, эвристики «похоже на трек», до max_results строк.
+    Telegram-бот для поиска использует search_videos() — без этих правил.
+    Возвращает список словарей с ключами:
+    video_id, title, channel, duration_seconds, duration_label, thumbnail_url, music_score
+    """
+    raw = _fetch_youtube_search_raw(query.strip(), fetch_cap)
+    if not raw:
         return []
+
+    scored: List[tuple[float, Dict[str, Any]]] = []
+
+    for item in raw:
+        vid = item.get("id")
+        title = item.get("title") or ""
+        channel = item.get("channel") or ""
+        if not vid:
+            continue
+
+        dur_label = item.get("duration")
+        dur_sec = parse_youtube_duration_to_seconds(dur_label)
+        if dur_sec is None:
+            continue
+        if dur_sec > max_duration_sec:
+            continue
+
+        mscore = score_youtube_music_candidate(title, channel, dur_sec)
+        thumb = f"https://img.youtube.com/vi/{vid}/mqdefault.jpg"
+        scored.append(
+            (
+                mscore,
+                {
+                    "video_id": vid,
+                    "title": title,
+                    "channel": channel,
+                    "duration_seconds": dur_sec,
+                    "duration_label": dur_label,
+                    "thumbnail_url": thumb,
+                    "music_score": round(mscore, 2),
+                },
+            )
+        )
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [x[1] for x in scored[:max_results]]
 
 
 def get_video_formats(url: str, max_formats=5):

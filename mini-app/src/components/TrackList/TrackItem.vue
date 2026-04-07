@@ -61,8 +61,14 @@
     <!-- Context Menu -->
     <Teleport to="body">
       <Transition name="menu">
-        <div v-if="showMenu" class="menu-overlay" @click="showMenu = false">
-          <div class="menu" @click.stop>
+        <div v-if="showMenu" class="menu-overlay" @click.self="showMenu = false">
+          <div
+            class="menu"
+            @click.stop
+            @touchstart="menuSwipe.touchStart"
+            @touchmove.passive="menuSwipe.touchMove"
+            @touchend="menuSwipe.touchEnd"
+          >
             <div class="menu-handle"></div>
             <div class="menu-track-info">
               <div class="menu-track-cover">
@@ -103,6 +109,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { usePlayerStore } from '../../stores/playerStore'
+import { useSwipeDownDismiss } from '../../composables/useSwipeDownDismiss'
 import IconMusic from '../Common/icons/IconMusic.vue'
 import IconHeart from '../Common/icons/IconHeart.vue'
 import IconMore from '../Common/icons/IconMore.vue'
@@ -132,6 +139,10 @@ const emit = defineEmits(['toggleFavorite'])
 
 const playerStore = usePlayerStore()
 const showMenu = ref(false)
+
+const menuSwipe = useSwipeDownDismiss(() => {
+  showMenu.value = false
+}, { threshold: 85 })
 
 const isPlaying = computed(() => 
   playerStore.currentTrack?.id === props.track.id && playerStore.isPlaying

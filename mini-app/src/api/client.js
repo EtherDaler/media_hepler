@@ -168,6 +168,26 @@ export const api = {
    */
   async getStats() {
     return fetchApi('/stats')
+  },
+
+  // ==================== Search (library + YouTube) ====================
+
+  /**
+   * Комбинированный поиск: библиотека + YouTube (музыка, до 10 мин)
+   */
+  async searchCombined(q) {
+    const query = new URLSearchParams({ q }).toString()
+    return fetchApi(`/search?${query}`)
+  },
+
+  /**
+   * Скачать трек с YouTube в бота и добавить в библиотеку
+   */
+  async importYoutubeVideo(videoId) {
+    return fetchApi('/youtube/import', {
+      method: 'POST',
+      body: JSON.stringify({ video_id: videoId })
+    })
   }
 }
 

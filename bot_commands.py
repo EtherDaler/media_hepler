@@ -19,7 +19,7 @@ from aiogram.enums.chat_action import ChatAction
 from sqlalchemy.ext.asyncio import AsyncSession
 from db import db_commands
 from db.audio_helper import save_sent_audio, save_audio_from_api_response
-from db.download_log import log_download, should_add_watermark, get_today_stats
+from db.download_log import log_download, should_add_watermark
 from data import config
 from models import User
 from link_handler import handle_instagram_link, handle_youtube_link, handle_pinterest_link, handle_tiktok_link
@@ -208,16 +208,9 @@ class VideoState(StatesGroup):
 class MetaDataState(StatesGroup):
     file = State()
 
-class SendAllState(StatesGroup):
-    message = State()
-
 class ReplaceAudioState(StatesGroup):
     video = State()
     audio = State()
-
-class AnswerState(StatesGroup):
-    tg_id = State()
-    message = State()
 
 class YoutubeSearchState(StatesGroup):
     select_action = State()
@@ -363,94 +356,6 @@ async def command_get_metadata(message: Message, state: FSMContext, session: Asy
     if status:
         await message.answer("Отправь мне файл (jpg, jpeg, heic, png), а так же можешь отправить файл видео или аудио.\n ВАЖНО: ОТПРАВЛЯЙТЕ ФАЙЛОМ!")
         await state.set_state(MetaDataState.file)
-
-
-@router.message(Command('count_users'))
-async def count_users(message: Message, session: AsyncSession) -> None:
-    user = await db_commands.get_item(User, 'tg_id', message.from_user.id, message, session)
-    if user is not None:
-        if user.is_admin:
-            users = await db_commands.db_get_items(User, message, session)
-            await message.answer(f"Количесвто пользователей, использующих бот: {len(users)}")
-        else:
-            await message.answer("У вас нет прав!")
-    else:
-        await message.answer("У вас нет прав!")
-
-
-@router.message(Command('stats'))
-async def stats_command(message: Message, session: AsyncSession) -> None:
-    """Статистика загрузок за сегодня (только для админов)"""
-    user = await db_commands.get_item(User, 'tg_id', message.from_user.id, message, session)
-    if user is None or not user.is_admin:
-        await message.answer("У вас нет прав!")
-        return
-    
-    # Получаем статистику
-    stats = await get_today_stats(session)
-    
-    # Формируем сообщение
-    platform_icons = {
-        'youtube': '🎬',
-        'shorts': '📱',
-        'reels': '📸',
-        'tiktok': '🎵',
-        'pinterest': '📌',
-        'audio': '🎧',
-        'instagram': '📷'
-    }
-    
-    # Заголовок
-    text = "📊 **Статистика за сегодня**\n\n"
-    
-    # DAU и общие загрузки
-    text += f"👥 DAU (уникальных пользователей): **{stats['dau']}**\n"
-    text += f"📥 Всего загрузок: **{stats['total_downloads']}**\n"
-    text += f"❌ Ошибок: **{stats['errors']}**\n\n"
-    
-    # По платформам
-    if stats['by_platform']:
-        text += "📈 **По платформам:**\n"
-        for platform, count in sorted(stats['by_platform'].items(), key=lambda x: x[1], reverse=True):
-            icon = platform_icons.get(platform, '📦')
-            text += f"  {icon} {platform}: {count}\n"
-        text += "\n"
-    else:
-        text += "📈 Загрузок пока нет\n\n"
-    
-    # Топ 3 пользователя
-    if stats['top_users']:
-        text += "🏆 **Топ 3 пользователя:**\n"
-        medals = ['🥇', '🥈', '🥉']
-        for i, (user_id, count) in enumerate(stats['top_users']):
-            medal = medals[i] if i < len(medals) else f"{i+1}."
-            text += f"  {medal} ID: `{user_id}` — {count} загрузок\n"
-    
-    await message.answer(text, parse_mode='Markdown')
-
-@router.message(Command('send_all'))
-async def send_all(message: Message, session: AsyncSession, state: FSMContext) -> None:
-    user = await db_commands.get_item(User, 'tg_id', message.from_user.id, message, session)
-    if user is not None:
-        if user.is_admin:
-            await message.answer("Напишите сообщение")
-            await state.set_state(SendAllState.message)
-        else:
-            await message.answer("У вас нет прав!")
-    else:
-        await message.answer("У вас нет прав!")
-
-@router.message(Command('answer'))
-async def answer(message: Message, session: AsyncSession, state: FSMContext) -> None:
-    user = await db_commands.get_item(User, 'tg_id', message.from_user.id, message, session)
-    if user is not None:
-        if user.is_admin:
-            await message.answer("Укажите tg_id пользователя")
-            await state.set_state(AnswerState.tg_id)
-        else:
-            await message.answer("У вас нет прав!")
-    else:
-        await message.answer("У вас нет прав!")
 
 
 @router.message(YoutubeState.link)
@@ -781,21 +686,6 @@ async def process_metadata(message: Message, state: FSMContext) -> None:
         else:
             await message.answer("Отправьте фото, видео или аудио файлом!")
 
-@router.message(SendAllState.message)
-async def process_sendall(message: Message, session: AsyncSession, state: FSMContext) -> None:
-    users = await db_commands.db_get_items(User, message, session)
-    state_message = message.text
-    for user in users:
-        if user.tg_id != message.from_user.id:
-            try:
-                await message.bot.send_message(user.tg_id, state_message)
-            except TelegramForbiddenError:
-                continue
-            except:
-                continue
-    await message.answer("Сообщение отправлено")
-    await state.clear()
-
 @router.message(ReplaceAudioState.video)
 async def replace_audio_video(message: Message, state: FSMContext) -> None:
     if message.content_type == ContentType.VIDEO:
@@ -870,25 +760,6 @@ async def replace_audio_audio(message: Message, state: FSMContext) -> None:
         await state.clear()
     else:
         await message.answer("Отправьте аудио.")
-
-@router.message(AnswerState.tg_id)
-async def process_tg_id(message: Message, state: FSMContext) -> None:
-    await state.update_data(tg_id = message.text)
-    await message.answer("Отправьте сообщение пользователю")
-    await state.set_state(AnswerState.message)
-
-
-@router.message(AnswerState.message)
-async def process_answer(message: Message, state: FSMContext) -> None:
-    await state.update_data(message = message.text)
-    state_info = await state.get_data()
-    try:
-        await message.bot.send_message(state_info['tg_id'], state_info['message'])
-        await message.answer("Сообщение успешно отправлено пользователю")
-    except TelegramForbiddenError:
-        await message.answer("Пользователь заблокировал бота")
-    await state.clear()
-
 
 @router.message(Command("cancel"))
 @router.message(F.text.casefold() == "отмена")
@@ -974,8 +845,8 @@ async def handle_search_query(message: Message, state: FSMContext, session: Asyn
 
     await message.answer("🔍 Ищу видео...")
 
-    # Выполняем поиск
-    results = worker.search_videos(query)
+    # Выполняем поиск (10 сырых результатов, без эвристик — как раньше; Mini App использует другой API)
+    results = worker.search_videos(query, max_results=10)
     if not results:
         await message.answer("❌ По вашему запросу ничего не найдено.")
         await message.bot.send_message(chat_id=config.DEV_CHANEL_ID, text=f"Пользователь @{username} (ID: {user_id}) искал: {query}, но не смог ничего найти. из #YouTube")

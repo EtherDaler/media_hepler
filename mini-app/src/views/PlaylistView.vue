@@ -60,7 +60,13 @@
     <!-- Menu -->
     <Teleport to="body">
       <div v-if="showMenu" class="menu-overlay" @click.self="showMenu = false">
-        <div class="menu">
+        <div
+          class="menu"
+          @click.stop
+          @touchstart="playlistMenuSwipe.touchStart"
+          @touchmove.passive="playlistMenuSwipe.touchMove"
+          @touchend="playlistMenuSwipe.touchEnd"
+        >
           <button class="menu-item" @click="editPlaylist">
             <IconEdit />
             <span>Редактировать</span>
@@ -82,6 +88,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client'
+import { useSwipeDownDismiss } from '../composables/useSwipeDownDismiss'
 import { usePlayerStore } from '../stores/playerStore'
 import TrackItem from '../components/TrackList/TrackItem.vue'
 import IconBack from '../components/Common/icons/IconBack.vue'
@@ -99,6 +106,10 @@ const playerStore = usePlayerStore()
 const playlist = ref(null)
 const isLoading = ref(true)
 const showMenu = ref(false)
+
+const playlistMenuSwipe = useSwipeDownDismiss(() => {
+  showMenu.value = false
+}, { threshold: 85 })
 
 onMounted(async () => {
   try {

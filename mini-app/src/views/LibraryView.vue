@@ -96,7 +96,13 @@
     <Teleport to="body">
       <Transition name="menu">
         <div v-if="showSyncModal" class="modal-overlay bottom" @click.self="showSyncModal = false">
-          <div class="sync-modal">
+          <div
+            class="sync-modal"
+            @click.stop
+            @touchstart="syncModalSwipe.touchStart"
+            @touchmove.passive="syncModalSwipe.touchMove"
+            @touchend="syncModalSwipe.touchEnd"
+          >
             <div class="sync-modal-handle"></div>
             <h3 class="sync-modal-title">Синхронизация треков</h3>
             <div class="sync-instructions">
@@ -130,7 +136,13 @@
     <!-- Create Playlist Modal -->
     <Teleport to="body">
       <div v-if="showCreatePlaylist" class="modal-overlay" @click.self="showCreatePlaylist = false">
-        <div class="modal">
+        <div
+          class="modal"
+          @click.stop
+          @touchstart="createPlaylistModalSwipe.touchStart"
+          @touchmove.passive="createPlaylistModalSwipe.touchMove"
+          @touchend="createPlaylistModalSwipe.touchEnd"
+        >
           <h3 class="modal-title">Новый плейлист</h3>
           <input
             v-model="newPlaylistName"
@@ -158,6 +170,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { api } from '../api/client'
+import { useSwipeDownDismiss } from '../composables/useSwipeDownDismiss'
 import TrackItem from '../components/TrackList/TrackItem.vue'
 import IconLibrary from '../components/Common/icons/IconLibrary.vue'
 import IconHeart from '../components/Common/icons/IconHeart.vue'
@@ -178,6 +191,14 @@ const hasMore = ref(false)
 const showCreatePlaylist = ref(false)
 const newPlaylistName = ref('')
 const showSyncModal = ref(false)
+
+const syncModalSwipe = useSwipeDownDismiss(() => {
+  showSyncModal.value = false
+}, { threshold: 90 })
+
+const createPlaylistModalSwipe = useSwipeDownDismiss(() => {
+  showCreatePlaylist.value = false
+}, { threshold: 90 })
 
 onMounted(async () => {
   await Promise.all([loadPlaylists(), loadTracks()])
