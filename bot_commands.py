@@ -220,11 +220,15 @@ class ShazamState(StatesGroup):
     confirm_download = State()
 
 
-_YOUTUBE_VIDEO_ID_RE = re.compile(r"^[\w-]{11}$")
-
-
-def _is_valid_youtube_video_id(vid: str) -> bool:
-    return bool(_YOUTUBE_VIDEO_ID_RE.match(vid))
+async def _safe_edit_status_message(message: Message, text: str) -> None:
+    """edit_text без падения, если текст совпадает с текущим (Telegram message is not modified)."""
+    try:
+        await message.edit_text(text)
+    except TelegramBadRequest as e:
+        err = (getattr(e, "message", None) or str(e)).lower()
+        if "not modified" in err or "message is not modified" in err:
+            return
+        raise
 
 
 async def deliver_youtube_audio_to_chat(
@@ -239,10 +243,11 @@ async def deliver_youtube_audio_to_chat(
     """Скачать аудио с YouTube и отправить в чат; сохранить в БД для Mini App."""
     video_id = selected_video["id"]
     link = f"https://www.youtube.com/watch?v={video_id}"
-    await progress_message.edit_text(
+    await _safe_edit_status_message(
+        progress_message,
         f"⏬ Загружаю аудио...\n\n"
         f"🎬 {selected_video['title']}\n"
-        "Пожалуйста, подождите ⏳"
+        "Пожалуйста, подождите ⏳",
     )
     await progress_message.bot.send_chat_action(progress_message.chat.id, ChatAction.UPLOAD_VOICE)
     try:
@@ -313,54 +318,8 @@ async def deliver_youtube_audio_to_chat(
         await log_download(session, user_id, 'audio', link, status=False)
 
 
-async def handle_miniapp_youtube_import(message: Message, session: AsyncSession, video_id: str) -> None:
-    """Импорт из Mini App: deep link /start impyt_<id> — та же загрузка, что и из поиска в боте."""
-    user_id = message.from_user.id
-    username = message.from_user.username
-    link = f"https://www.youtube.com/watch?v={video_id}"
-    title = video_id
-    try:
-        info = worker.get_youtube_video_info(link)
-        if info:
-            title = info.get("title") or title
-    except Exception:
-        pass
-    selected_video = {"id": video_id, "title": title}
-    status_msg = await message.answer(
-        f"⏬ Загружаю аудио...\n\n"
-        f"🎬 {title}\n"
-        "Пожалуйста, подождите ⏳"
-    )
-    await deliver_youtube_audio_to_chat(
-        progress_message=status_msg,
-        session=session,
-        user_id=user_id,
-        username=username,
-        selected_video=selected_video,
-        search_query="Mini App поиск",
-    )
-
-
 @router.message(CommandStart())
 async def command_start_handler(message: Message, session: AsyncSession) -> None:
-    parts = (message.text or "").split(maxsplit=1)
-    if len(parts) > 1:
-        arg = parts[1].strip()
-        if arg.startswith("impyt_"):
-            vid = arg[6:].strip()
-            if _is_valid_youtube_video_id(vid):
-                status = True
-                user = await db_commands.get_item(User, 'tg_id', message.from_user.id, message, session)
-                if user is None:
-                    status = await db_commands.db_register_user(message, session)
-                    if status:
-                        await db_commands.get_item(User, 'tg_id', message.from_user.id, message, session)
-                if not status:
-                    await message.answer("Произошла ошибка, повторите попытку позже!")
-                    return
-                await handle_miniapp_youtube_import(message, session, vid)
-                return
-
     file = "./texts/start_text.txt"
     status = True
     user = await db_commands.get_item(User, 'tg_id', message.from_user.id, message, session)

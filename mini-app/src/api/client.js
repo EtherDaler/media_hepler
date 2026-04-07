@@ -181,10 +181,13 @@ export const api = {
   },
 
   /**
-   * Публичная конфигурация: имя бота для deep link (импорт через чат).
+   * Скачать с YouTube на сервере, отправить аудио в чат через Bot API, сохранить в библиотеку.
    */
-  async getMiniAppConfig() {
-    return fetchApi('/config')
+  async importYoutubeVideo(videoId) {
+    return fetchApi('/youtube/import', {
+      method: 'POST',
+      body: JSON.stringify({ video_id: videoId })
+    })
   }
 }
 

@@ -36,7 +36,7 @@
 
       <section v-if="youtubeTracks.length" class="section">
         <h2 class="section-title">YouTube</h2>
-        <p class="section-hint">До 10 мин · «+» открывает чат с ботом: он скачает аудио, трек появится в библиотеке</p>
+        <p class="section-hint">До 10 мин · «+» скачивает на сервер и добавляет трек в библиотеку</p>
         <div class="track-list">
           <YoutubeSearchRow
             v-for="yt in youtubeTracks"
@@ -58,14 +58,15 @@
     <div v-else class="hint">
       <IconSearch class="hint-icon" />
       <p>Введите название трека или исполнителя</p>
-      <p class="text-secondary hint-sub">Сначала покажем совпадения из вашей библиотеки, затем ролики с YouTube. Добавление через «+» — загрузка в чате с ботом.</p>
+      <p class="text-secondary hint-sub">Сначала покажем совпадения из вашей библиотеки, затем ролики с YouTube</p>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 import { api } from '../api/client'
+import { usePlayerStore } from '../stores/playerStore'
 import TrackItem from '../components/TrackList/TrackItem.vue'
 import YoutubeSearchRow from '../components/TrackList/YoutubeSearchRow.vue'
 import IconSearch from '../components/Common/icons/IconSearch.vue'
@@ -76,20 +77,11 @@ const libraryTracks = ref([])
 const youtubeTracks = ref([])
 const isLoading = ref(false)
 const importingVideoId = ref(null)
-const botUsername = ref('')
 
+const playerStore = usePlayerStore()
 const tg = typeof window !== 'undefined' ? window.Telegram?.WebApp : null
 
 let searchTimeout = null
-
-onMounted(async () => {
-  try {
-    const cfg = await api.getMiniAppConfig()
-    botUsername.value = (cfg.bot_username || '').trim()
-  } catch (e) {
-    console.error('getMiniAppConfig failed:', e)
-  }
-})
 
 function handleSearch() {
   clearTimeout(searchTimeout)
@@ -132,33 +124,17 @@ async function handleToggleFavorite(track) {
 }
 
 async function handleYoutubeAdd(item) {
-  if (!botUsername.value) {
-    try {
-      const cfg = await api.getMiniAppConfig()
-      botUsername.value = (cfg.bot_username || '').trim()
-    } catch (e) {
-      console.error(e)
-    }
-  }
-  if (!botUsername.value) {
-    tg?.showAlert?.(
-      'На сервере не задан BOT_USERNAME в .env (имя бота без @). Добавьте и перезапустите API.'
-    )
-    tg?.HapticFeedback?.notificationOccurred?.('error')
-    return
-  }
   importingVideoId.value = item.video_id
   try {
-    const url = `https://t.me/${botUsername.value}?start=impyt_${item.video_id}`
-    if (tg?.openTelegramLink) {
-      tg.openTelegramLink(url)
-    } else {
-      window.open(url, '_blank')
-    }
+    const track = await api.importYoutubeVideo(item.video_id)
+    libraryTracks.value = [track, ...libraryTracks.value.filter((t) => t.id !== track.id)]
+    youtubeTracks.value = youtubeTracks.value.filter((y) => y.video_id !== item.video_id)
+    await playerStore.playTrack(track)
     tg?.HapticFeedback?.notificationOccurred?.('success')
   } catch (error) {
-    console.error('Open bot failed:', error)
-    tg?.showAlert?.(error?.message || 'Не удалось открыть чат с ботом')
+    console.error('Import failed:', error)
+    const msg = error?.message || 'Не удалось добавить трек'
+    tg?.showAlert?.(msg)
     tg?.HapticFeedback?.notificationOccurred?.('error')
   } finally {
     importingVideoId.value = null

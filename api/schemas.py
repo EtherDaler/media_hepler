@@ -152,9 +152,3 @@ class YouTubeImportResponse(AudioResponse):
 
     pass
 
-
-class MiniAppPublicConfigResponse(BaseModel):
-    """Публичные настройки для Mini App (без авторизации)."""
-
-    bot_username: Optional[str] = None
-

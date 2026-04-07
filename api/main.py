@@ -6,8 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_db, get_user_id
 from api.routes import audio, playlists, favorites, search
-from api.schemas import MiniAppPublicConfigResponse, UserStatsResponse
-from data import config
+from api.schemas import UserStatsResponse
 from db.audio_commands import count_user_audio, count_user_favorites
 from models import Playlist
 from sqlalchemy import select, func
@@ -39,14 +38,6 @@ app.include_router(search.router)
 async def root():
     """Проверка работоспособности API"""
     return {"status": "ok", "app": "Media Helper Mini App API"}
-
-
-@app.get("/config", response_model=MiniAppPublicConfigResponse)
-async def mini_app_public_config():
-    """Имя бота для deep link (импорт из поиска через чат)."""
-    return MiniAppPublicConfigResponse(
-        bot_username=config.BOT_USERNAME or None,
-    )
 
 
 @app.get("/stats", response_model=UserStatsResponse)
