@@ -88,7 +88,8 @@ def _build_extractor_args(youtube_inner: dict) -> dict:
     out: Dict[str, Any] = {"youtube": youtube_inner}
     base = _effective_bgutil_base_url()
     if base:
-        out["youtubepot-bgutilhttp"] = {"base_url": base}
+        # yt-dlp configuration_arg() итерирует строку по символам, если передать str — base_url станет «h».
+        out["youtubepot-bgutilhttp"] = {"base_url": [base]}
     return out
 
 
