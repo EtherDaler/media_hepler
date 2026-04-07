@@ -36,10 +36,10 @@ from data.config import (
 
 logger = logging.getLogger(__name__)
 
-# Innertube: android/ios — REQUIRE_JS_PLAYER=False (меньше «Signature solving failed» на сервере без Node);
-# web_creator в конце (REQUIRE_AUTH, SABR/PO тяжелее).
-YTDLP_PC_PRIMARY = ["android", "ios", "web", "mweb", "tv", "web_creator"]
-YTDLP_PC_WEB = ["android", "ios", "web", "mweb"]
+# Клиенты с cookies: только те, у кого SUPPORTS_COOKIES (android/ios yt-dlp пропускает — «does not support cookies»).
+# Порядок как до правок: web_creator → mweb → tv; fallback — web + mweb.
+YTDLP_PC_PRIMARY = ["web_creator", "mweb", "tv"]
+YTDLP_PC_WEB = ["web", "mweb"]
 
 PARSED_PROXYS = json.loads(PROXYS)
 
