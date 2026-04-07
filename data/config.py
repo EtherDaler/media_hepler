@@ -31,12 +31,20 @@ PROXYS = os.environ.get("PROXY", "[]")
 SIMPLE_PROXY = os.environ.get("SIMPLE_PROXY")
 DEFAULT_YT_COOKIE = os.environ.get("DEFAULT_YT_COOKIE")
 
+# Авто-PO (bgutil-ytdlp-pot-provider): pip install + HTTP-сервер рядом с воркером.
+# https://github.com/Brainicism/bgutil-ytdlp-pot-provider
+# Явный URL провайдера (перекрывает дефолт ниже):
+BGUTIL_POT_BASE_URL = (os.environ.get("BGUTIL_POT_BASE_URL") or "").strip().rstrip("/")
+# Если BGUTIL_POT_BASE_URL пустой, но есть файл DEFAULT_YT_COOKIE — подставляется этот адрес:
+DEFAULT_BGUTIL_POT_HTTP = (os.environ.get("DEFAULT_BGUTIL_POT_HTTP") or "http://127.0.0.1:4416").strip().rstrip("/")
+# 1 / true — не передавать bgutil в yt-dlp (только cookies и без авто-POT)
+BGUTIL_DISABLE = (os.environ.get("BGUTIL_DISABLE") or "").strip().lower() in ("1", "true", "yes", "on")
+
 # Mini App URL (для кнопки в боте)
 MINI_APP_URL = os.environ.get("MINI_APP_URL")
 DAILY_VIDEO_LIMIT = int(os.environ.get("DAILY_VIDEO_LIMIT", 10))
 
-# YouTube PO Token (для обхода age-restriction без cookies)
-# Получить можно через DevTools или расширение браузера
+# YouTube: только если НЕТ файла DEFAULT_YT_COOKIE (иначе сессия из cookies; смешивать с env нельзя)
 YT_PO_TOKEN = os.environ.get("YT_PO_TOKEN")
 YT_VISITOR_DATA = os.environ.get("YT_VISITOR_DATA")
 

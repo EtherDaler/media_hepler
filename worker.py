@@ -20,13 +20,56 @@ from youtube_search import YoutubeSearch
 from yt_dlp.networking.exceptions import SSLError
 from yt_dlp.utils import DownloadError
 
-from data.config import PROXYS, DEFAULT_YT_COOKIE, YT_PO_TOKEN, YT_VISITOR_DATA, SIMPLE_PROXY
+from data.config import (
+    BGUTIL_DISABLE,
+    BGUTIL_POT_BASE_URL,
+    DEFAULT_BGUTIL_POT_HTTP,
+    PROXYS,
+    DEFAULT_YT_COOKIE,
+    YT_PO_TOKEN,
+    YT_VISITOR_DATA,
+    SIMPLE_PROXY,
+)
 
 
 logger = logging.getLogger(__name__)
 
 
 PARSED_PROXYS = json.loads(PROXYS)
+
+
+def _strip_env_secret(value) -> str:
+    """Убираем пробелы и обрамляющие кавычки из .env (частая причина «битого» токена)."""
+    if value is None:
+        return ""
+    return str(value).strip().strip('"').strip("'")
+
+
+def _has_default_yt_cookie_file() -> bool:
+    return bool(DEFAULT_YT_COOKIE and os.path.isfile(DEFAULT_YT_COOKIE))
+
+
+def _effective_bgutil_base_url() -> str:
+    """
+    URL HTTP-провайдера bgutil для yt-dlp.
+    Приоритет: BGUTIL_DISABLE → явный BGUTIL_POT_BASE_URL → при наличии cookie-файла DEFAULT_BGUTIL_POT_HTTP.
+    """
+    if BGUTIL_DISABLE:
+        return ""
+    if BGUTIL_POT_BASE_URL:
+        return BGUTIL_POT_BASE_URL
+    if _has_default_yt_cookie_file():
+        return DEFAULT_BGUTIL_POT_HTTP
+    return ""
+
+
+def _build_extractor_args(youtube_inner: dict) -> dict:
+    """Аргументы экстракторов: youtube + опционально bgutil POT (пакет bgutil-ytdlp-pot-provider)."""
+    out: Dict[str, Any] = {"youtube": youtube_inner}
+    base = _effective_bgutil_base_url()
+    if base:
+        out["youtubepot-bgutilhttp"] = {"base_url": base}
+    return out
 
 
 def find(pattern, path):
@@ -176,34 +219,49 @@ def cleanup_temp_cookies():
     _temp_cookie_files = []
 
 
-def get_yt_dlp_conf(path, proxy=None, player_client=["web"]):
+def get_yt_dlp_conf(path, proxy=None, player_client=None, *, skip_po_token: bool = False):
     """
     Возвращает ydl_opts. Если proxy_url задан — он подставляется (нормализуется).
     Использует временную копию cookies чтобы не портить оригинал.
     Поддерживает PO Token для обхода age-restriction.
+    skip_po_token=True — не подставлять po_token (доп. попытки при сбоях yt-dlp).
     """
+    if player_client is None:
+        player_client = ["web"]
     # Базовые extractor_args
     youtube_args = {
         'player_client': player_client,
     }
-    
-    # Добавляем PO Token если есть (более стабильный чем cookies для age-restricted)
-    if YT_PO_TOKEN:
-        youtube_args['po_token'] = [f'web+{YT_PO_TOKEN}']
-        logger.info("Using YouTube PO Token for authentication")
-    if YT_VISITOR_DATA:
-        youtube_args['visitor_data'] = [YT_VISITOR_DATA]
-        logger.info("Using YouTube Visitor Data")
-    
+
+    has_cookie = _has_default_yt_cookie_file()
+    # С файлом cookies сессия уже согласована; ручные po_token/visitor из .env только мешают.
+    if not has_cookie:
+        if YT_PO_TOKEN and not skip_po_token:
+            raw = _strip_env_secret(YT_PO_TOKEN)
+            if raw:
+                youtube_args['po_token'] = [f"web+{raw}"]
+                logger.info("Using YouTube PO Token from .env (cookies file not set)")
+        if YT_VISITOR_DATA:
+            vd = _strip_env_secret(YT_VISITOR_DATA)
+            if vd:
+                youtube_args['visitor_data'] = [vd]
+                logger.info("Using YouTube Visitor Data from .env (cookies file not set)")
+    else:
+        logger.debug(
+            "YouTube: cookiefile %s — YT_PO_TOKEN/YT_VISITOR_DATA из .env не используются; "
+            "авто-POT: bgutil (pip install bgutil-ytdlp-pot-provider, сервер %s или BGUTIL_POT_BASE_URL; "
+            "отключить: BGUTIL_DISABLE=1)",
+            DEFAULT_YT_COOKIE,
+            DEFAULT_BGUTIL_POT_HTTP,
+        )
+
     ydl_opts = {
         'format': 'bestvideo[height<=1080]+bestaudio/bestvideo+bestaudio/best',
         'outtmpl': f'{path}/%(title)s.%(ext)s',
         'noplaylist': True,
         'verbose': False,  # уменьшаем логирование
         'quiet': False,    # включаем логирование для отладки
-        'extractor_args': {
-            'youtube': youtube_args
-        },
+        'extractor_args': _build_extractor_args(youtube_args),
         'http_chunk_size': 0,   # отключаем chunked/Range-запросы
         'nopart': True,         # не использовать .part файлы
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -322,9 +380,9 @@ async def get_format_for_youtube(ydl_opts, link, format_id='best', res='720p'):
 async def download_from_youtube(link, path='./videos/youtube', out_format="mp4", res="720p", format_id="best", filename=None):
     """
     Логика:
-    1) Скачать без прокси (web_creator / mweb / tv), затем android_embedded.
-    2) Если не вышло — с прокси: все записи из PROXY (перемешанные) или SIMPLE_PROXY, для каждого —
-       те же клиенты, пока загрузка не удастся.
+    1) Без прокси (web_creator / mweb / tv), затем клиент web.
+    2) С прокси — те же шаги по списку PROXY / SIMPLE_PROXY.
+    3) Финально — широкие format strings без YT_PO_TOKEN (спасает при битом токене в .env).
     Видеофайл временно в path; после конвертации в get_audio_from_youtube исходник удаляется.
     Возвращает имя файла (строку) или None.
     """
@@ -363,10 +421,10 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
         logger.exception(f"Unexpected error in primary no-proxy flow: {e}")
         result = None
 
-    # fallback no-proxy alt client
+    # fallback no-proxy: web (android_embedded в новых yt-dlp часто отключён)
     if result is None:
         try:
-            ydl_opts_alt = get_yt_dlp_conf(path, proxy=None, player_client=['android_embedded'])
+            ydl_opts_alt = get_yt_dlp_conf(path, proxy=None, player_client=['web', 'mweb'])
             ydl_opts_alt['format'] = 'best'
             result = await try_strategy(ydl_opts_alt, tries=1)
         except Exception as e:
@@ -397,12 +455,56 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
 
             if result is None:
                 try:
-                    ydl_opts_p2 = get_yt_dlp_conf(path, proxy=proxy, player_client=['android_embedded'])
+                    ydl_opts_p2 = get_yt_dlp_conf(path, proxy=proxy, player_client=['web', 'mweb'])
                     ydl_opts_p2['format'] = 'best'
                     result = await try_strategy(ydl_opts_p2, tries=1)
                 except Exception as e:
-                    logger.exception(f"Unexpected error in proxy fallback (android_embedded): {e}")
+                    logger.exception(f"Unexpected error in proxy fallback (web): {e}")
                     result = None
+
+    # 3) Широкие форматы без PO-токена (неверный YT_PO_TOKEN → «only images» / format not available)
+    if result is None:
+        for fmt in (
+            'bestvideo+bestaudio/best',
+            'bestvideo[height<=720]+bestaudio/best',
+            'best[ext=mp4]/best[ext=webm]/best',
+            '18/best',
+            'worst',
+        ):
+            if result is not None:
+                break
+            try:
+                ydl_opts = get_yt_dlp_conf(
+                    path, proxy=None, player_client=['web_creator', 'mweb', 'tv'],
+                    skip_po_token=True,
+                )
+                ydl_opts['format'] = fmt
+                logger.info(f"Loose format fallback (skip_po_token): {fmt}")
+                result = await try_strategy(ydl_opts, tries=1)
+            except Exception as e:
+                logger.warning(f"Loose format {fmt} failed: {e}")
+
+    if result is None:
+        try:
+            pl = _all_proxy_candidates()
+        except Exception:
+            pl = []
+        for proxy in pl:
+            if result is not None:
+                break
+            for fmt in ('bestvideo+bestaudio/best', 'best[ext=mp4]/best', '18/best'):
+                if result is not None:
+                    break
+                try:
+                    ydl_opts = get_yt_dlp_conf(
+                        path, proxy=proxy, player_client=['web_creator', 'mweb', 'tv'],
+                        skip_po_token=True,
+                    )
+                    ydl_opts['format'] = fmt
+                    logger.info(f"Loose format via proxy (skip_po_token): {fmt}")
+                    result = await try_strategy(ydl_opts, tries=1)
+                except Exception as e:
+                    logger.warning(f"Proxy loose format {fmt}: {e}")
 
     os.environ.pop('ALL_PROXY', None)
     os.environ.pop('HTTP_PROXY', None)
@@ -646,20 +748,23 @@ def get_video_formats(url: str, max_formats=5):
     
     # Попытка без прокси (используем временную копию куки!)
     youtube_args = {}
-    if YT_PO_TOKEN:
-        youtube_args['po_token'] = [f'web+{YT_PO_TOKEN}']
-        logger.info("Using YouTube PO Token for authentication")
-    if YT_VISITOR_DATA:
-        youtube_args['visitor_data'] = [YT_VISITOR_DATA]
-        logger.info("Using YouTube Visitor Data")
+    if not _has_default_yt_cookie_file():
+        if YT_PO_TOKEN:
+            raw = _strip_env_secret(YT_PO_TOKEN)
+            if raw:
+                youtube_args['po_token'] = [f'web+{raw}']
+                logger.info("Using YouTube PO Token from .env (cookies file not set)")
+        if YT_VISITOR_DATA:
+            vd = _strip_env_secret(YT_VISITOR_DATA)
+            if vd:
+                youtube_args['visitor_data'] = [vd]
+                logger.info("Using YouTube Visitor Data from .env (cookies file not set)")
 
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
         'age_limit': None,  # Снимаем ограничение возраста
-        'extractor_args': {
-            'youtube': youtube_args
-        },
+        'extractor_args': _build_extractor_args(youtube_args),
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'referer': 'https://www.youtube.com/'
     }
@@ -1139,13 +1244,15 @@ def get_youtube_video_info(url):
     os.environ.pop('HTTP_PROXY', None)
     os.environ.pop('HTTPS_PROXY', None)
     ydl_opts = {
-        'quiet': True, 
+        'quiet': True,
         'no_warnings': True,
         'skip_download': True,  # Явно указываем что не скачиваем
         'extract_flat': 'in_playlist',  # Для одиночных видео - полная инфа, для плейлистов - только метаданные
         'ignore_no_formats_error': True,  # Игнорируем ошибки форматов - нам нужны только метаданные
     }
-    
+    if _effective_bgutil_base_url():
+        ydl_opts['extractor_args'] = _build_extractor_args({})
+
     # Используем временную копию куки, чтобы оригинал не перезатирался
     if DEFAULT_YT_COOKIE and os.path.isfile(DEFAULT_YT_COOKIE):
         temp_cookie = get_temp_cookie_copy(DEFAULT_YT_COOKIE)

@@ -26,8 +26,9 @@ Pillow>=10.0.0
 numpy>=1.26.0
 mutagen>=1.47.0
 
-# YouTube/Instagram
-yt-dlp>=2024.9.0
+# YouTube/Instagram (bgutil — авто PO token при pip install + сервер на 4416 или BGUTIL_POT_BASE_URL)
+yt-dlp>=2025.5.22
+bgutil-ytdlp-pot-provider>=1.0.0
 instaloader>=4.13.0
 insta-scrape>=2.1.0
 
