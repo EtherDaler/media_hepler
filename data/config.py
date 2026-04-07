@@ -35,9 +35,9 @@ DEFAULT_YT_COOKIE = os.environ.get("DEFAULT_YT_COOKIE")
 # https://github.com/Brainicism/bgutil-ytdlp-pot-provider
 # Явный URL провайдера (перекрывает дефолт ниже):
 BGUTIL_POT_BASE_URL = (os.environ.get("BGUTIL_POT_BASE_URL") or "").strip().rstrip("/")
-# Если BGUTIL_POT_BASE_URL пустой, но есть файл DEFAULT_YT_COOKIE — подставляется этот адрес:
+# Если BGUTIL_POT_BASE_URL пустой, подставляется этот адрес (по умолчанию локальный bgutil).
 DEFAULT_BGUTIL_POT_HTTP = (os.environ.get("DEFAULT_BGUTIL_POT_HTTP") or "http://127.0.0.1:4416").strip().rstrip("/")
-# 1 / true — не передавать bgutil в yt-dlp (только cookies и без авто-POT)
+# 1 / true — не передавать bgutil в yt-dlp (если сервер не запущен — иначе будут ошибки подключения к POT)
 BGUTIL_DISABLE = (os.environ.get("BGUTIL_DISABLE") or "").strip().lower() in ("1", "true", "yes", "on")
 
 # Mini App URL (для кнопки в боте)

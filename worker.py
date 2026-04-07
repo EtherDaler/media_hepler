@@ -12,6 +12,7 @@ import logging
 import urllib
 import shutil
 import tempfile
+from pathlib import Path
 
 from datetime import datetime
 from typing import Optional, Dict, Any, List
@@ -45,22 +46,41 @@ def _strip_env_secret(value) -> str:
     return str(value).strip().strip('"').strip("'")
 
 
+def _project_root() -> Path:
+    """Корень репозитория (рядом с worker.py)."""
+    return Path(__file__).resolve().parent
+
+
+def _resolve_yt_cookie_path() -> Optional[str]:
+    """
+    Абсолютный путь к cookie-файлу. Учитывает cwd (uvicorn/api часто стартуют не из корня проекта).
+    """
+    if not DEFAULT_YT_COOKIE:
+        return None
+    p = Path(DEFAULT_YT_COOKIE).expanduser()
+    if p.is_file():
+        return str(p.resolve())
+    alt = _project_root() / DEFAULT_YT_COOKIE
+    if alt.is_file():
+        return str(alt.resolve())
+    return None
+
+
 def _has_default_yt_cookie_file() -> bool:
-    return bool(DEFAULT_YT_COOKIE and os.path.isfile(DEFAULT_YT_COOKIE))
+    return _resolve_yt_cookie_path() is not None
 
 
 def _effective_bgutil_base_url() -> str:
     """
-    URL HTTP-провайдера bgutil для yt-dlp.
-    Приоритет: BGUTIL_DISABLE → явный BGUTIL_POT_BASE_URL → при наличии cookie-файла DEFAULT_BGUTIL_POT_HTTP.
+    URL HTTP-провайдера bgutil для yt-dlp (в extractor_args → непустой base_url, иначе плагин шлёт /ping на "").
+    Приоритет: BGUTIL_DISABLE → BGUTIL_POT_BASE_URL → DEFAULT_BGUTIL_POT_HTTP.
+    Без локального bgutil задайте BGUTIL_DISABLE=1.
     """
     if BGUTIL_DISABLE:
         return ""
     if BGUTIL_POT_BASE_URL:
         return BGUTIL_POT_BASE_URL
-    if _has_default_yt_cookie_file():
-        return DEFAULT_BGUTIL_POT_HTTP
-    return ""
+    return DEFAULT_BGUTIL_POT_HTTP
 
 
 def _build_extractor_args(youtube_inner: dict) -> dict:
@@ -251,7 +271,7 @@ def get_yt_dlp_conf(path, proxy=None, player_client=None, *, skip_po_token: bool
             "YouTube: cookiefile %s — YT_PO_TOKEN/YT_VISITOR_DATA из .env не используются; "
             "авто-POT: bgutil (pip install bgutil-ytdlp-pot-provider, сервер %s или BGUTIL_POT_BASE_URL; "
             "отключить: BGUTIL_DISABLE=1)",
-            DEFAULT_YT_COOKIE,
+            _resolve_yt_cookie_path() or DEFAULT_YT_COOKIE,
             DEFAULT_BGUTIL_POT_HTTP,
         )
 
@@ -281,11 +301,12 @@ def get_yt_dlp_conf(path, proxy=None, player_client=None, *, skip_po_token: bool
     # - PO Token + Visitor Data = основной метод (не требует обновления)
     # - Cookies = fallback/дополнение (могут истекать)
     # Если PO Token есть и работает, cookies можно не использовать
-    if DEFAULT_YT_COOKIE and os.path.isfile(DEFAULT_YT_COOKIE):
-        temp_cookie = get_temp_cookie_copy(DEFAULT_YT_COOKIE)
+    _cookie_path = _resolve_yt_cookie_path()
+    if _cookie_path:
+        temp_cookie = get_temp_cookie_copy(_cookie_path)
         if temp_cookie:
             ydl_opts['cookiefile'] = temp_cookie
-            logger.debug(f"Using YouTube cookies: {DEFAULT_YT_COOKIE}")
+            logger.debug("Using YouTube cookies: %s", _cookie_path)
 
     if proxy:
         proxy_url = list(proxy.keys())[0]
@@ -769,21 +790,20 @@ def get_video_formats(url: str, max_formats=5):
         'referer': 'https://www.youtube.com/'
     }
     
-    # Проверяем наличие и валидность cookie файла
-    cookie_exists = DEFAULT_YT_COOKIE and os.path.isfile(DEFAULT_YT_COOKIE)
-    logger.info(f"get_video_formats: Cookie file exists: {cookie_exists}, path: {DEFAULT_YT_COOKIE}")
-    
-    # Используем временную копию куки, чтобы оригинал не перезатирался
+    _cf = _resolve_yt_cookie_path()
+    cookie_exists = bool(_cf)
+    logger.info("get_video_formats: Cookie file exists: %s, path: %s", cookie_exists, _cf or DEFAULT_YT_COOKIE)
+
     temp_cookie = None
-    if DEFAULT_YT_COOKIE and os.path.isfile(DEFAULT_YT_COOKIE):
-        temp_cookie = get_temp_cookie_copy(DEFAULT_YT_COOKIE)
+    if _cf:
+        temp_cookie = get_temp_cookie_copy(_cf)
         if temp_cookie:
             ydl_opts['cookiefile'] = temp_cookie
-            logger.info(f"get_video_formats: Using temp cookie: {temp_cookie}")
+            logger.info("get_video_formats: Using temp cookie: %s", temp_cookie)
         else:
             logger.warning("get_video_formats: Failed to create temp cookie copy!")
     else:
-        logger.warning(f"get_video_formats: Cookie file NOT found at {DEFAULT_YT_COOKIE}")
+        logger.warning("get_video_formats: Cookie file NOT found at %s (cwd=%s)", DEFAULT_YT_COOKIE, os.getcwd())
     
     try:
         result = extract_formats(ydl_opts)
@@ -1253,12 +1273,12 @@ def get_youtube_video_info(url):
     if _effective_bgutil_base_url():
         ydl_opts['extractor_args'] = _build_extractor_args({})
 
-    # Используем временную копию куки, чтобы оригинал не перезатирался
-    if DEFAULT_YT_COOKIE and os.path.isfile(DEFAULT_YT_COOKIE):
-        temp_cookie = get_temp_cookie_copy(DEFAULT_YT_COOKIE)
+    _cf_info = _resolve_yt_cookie_path()
+    if _cf_info:
+        temp_cookie = get_temp_cookie_copy(_cf_info)
         if temp_cookie:
             ydl_opts['cookiefile'] = temp_cookie
-    
+
     video_id = extract_video_id(url)
     video_info = None
     try:
