@@ -30,11 +30,16 @@ from data.config import (
     YT_PO_TOKEN,
     YT_VISITOR_DATA,
     SIMPLE_PROXY,
+    YTDLP_REMOTE_COMPONENTS,
 )
 
 
 logger = logging.getLogger(__name__)
 
+# Innertube: android/ios — REQUIRE_JS_PLAYER=False (меньше «Signature solving failed» на сервере без Node);
+# web_creator в конце (REQUIRE_AUTH, SABR/PO тяжелее).
+YTDLP_PC_PRIMARY = ["android", "ios", "web", "mweb", "tv", "web_creator"]
+YTDLP_PC_WEB = ["android", "ios", "web", "mweb"]
 
 PARSED_PROXYS = json.loads(PROXYS)
 
@@ -294,8 +299,8 @@ def get_yt_dlp_conf(path, proxy=None, player_client=None, *, skip_po_token: bool
         'skip_unavailable_fragments': True,
         'continue_dl': True,
         'ignoreerrors': False,
-        # Включаем remote components для решения JS challenges (вместо --remote-components ejs:github)
-        'remote_components': ['ejs:github'],
+        # JS solver для n/signature (см. YTDLP_REMOTE_COMPONENTS; на сервере желателен Node.js)
+        'remote_components': YTDLP_REMOTE_COMPONENTS,
     }
     
     # Логика аутентификации:
@@ -433,7 +438,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
 
     # 1) no-proxy, web-like (пробуем разные клиенты)
     try:
-        ydl_opts = get_yt_dlp_conf(path, proxy=None, player_client=['web_creator', 'mweb', 'tv'])
+        ydl_opts = get_yt_dlp_conf(path, proxy=None, player_client=YTDLP_PC_PRIMARY)
         chosen_format = await get_format_for_youtube(ydl_opts, link, format_id, res)
         # Добавляем fallback на 'best' если выбранный формат недоступен
         ydl_opts['format'] = f"{chosen_format}/best" if chosen_format != 'best' else 'best'
@@ -446,7 +451,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
     # fallback no-proxy: web (android_embedded в новых yt-dlp часто отключён)
     if result is None:
         try:
-            ydl_opts_alt = get_yt_dlp_conf(path, proxy=None, player_client=['web', 'mweb'])
+            ydl_opts_alt = get_yt_dlp_conf(path, proxy=None, player_client=YTDLP_PC_WEB)
             ydl_opts_alt['format'] = 'best'
             result = await try_strategy(ydl_opts_alt, tries=1)
         except Exception as e:
@@ -466,7 +471,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
                 break
             # primary: web_creator / mweb / tv
             try:
-                ydl_opts_p = get_yt_dlp_conf(path, proxy=proxy, player_client=['web_creator', 'mweb', 'tv'])
+                ydl_opts_p = get_yt_dlp_conf(path, proxy=proxy, player_client=YTDLP_PC_PRIMARY)
                 chosen_format_p = await get_format_for_youtube(ydl_opts_p, link, format_id, res)
                 ydl_opts_p['format'] = f"{chosen_format_p}/best" if chosen_format_p != 'best' else 'best'
                 logger.info(f"Chosen format (proxy): {ydl_opts_p['format']}")
@@ -477,7 +482,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
 
             if result is None:
                 try:
-                    ydl_opts_p2 = get_yt_dlp_conf(path, proxy=proxy, player_client=['web', 'mweb'])
+                    ydl_opts_p2 = get_yt_dlp_conf(path, proxy=proxy, player_client=YTDLP_PC_WEB)
                     ydl_opts_p2['format'] = 'best'
                     result = await try_strategy(ydl_opts_p2, tries=1)
                 except Exception as e:
@@ -497,7 +502,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
                 break
             try:
                 ydl_opts = get_yt_dlp_conf(
-                    path, proxy=None, player_client=['web_creator', 'mweb', 'tv'],
+                    path, proxy=None, player_client=YTDLP_PC_PRIMARY,
                     skip_po_token=True,
                 )
                 ydl_opts['format'] = fmt
@@ -519,7 +524,7 @@ async def download_from_youtube(link, path='./videos/youtube', out_format="mp4",
                     break
                 try:
                     ydl_opts = get_yt_dlp_conf(
-                        path, proxy=proxy, player_client=['web_creator', 'mweb', 'tv'],
+                        path, proxy=proxy, player_client=YTDLP_PC_PRIMARY,
                         skip_po_token=True,
                     )
                     ydl_opts['format'] = fmt

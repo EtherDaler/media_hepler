@@ -1,4 +1,5 @@
 import os
+from typing import List
 
 from dotenv import load_dotenv
 
@@ -39,6 +40,13 @@ BGUTIL_POT_BASE_URL = (os.environ.get("BGUTIL_POT_BASE_URL") or "").strip().rstr
 DEFAULT_BGUTIL_POT_HTTP = (os.environ.get("DEFAULT_BGUTIL_POT_HTTP") or "http://127.0.0.1:4416").strip().rstrip("/")
 # 1 / true — не передавать bgutil в yt-dlp (если сервер не запущен — иначе будут ошибки подключения к POT)
 BGUTIL_DISABLE = (os.environ.get("BGUTIL_DISABLE") or "").strip().lower() in ("1", "true", "yes", "on")
+
+# yt-dlp --remote-components: загрузка JS solver для n/signature (ejs:github). none/off — отключить (нужен Node.js на PATH).
+_raw_rc = (os.environ.get("YTDLP_REMOTE_COMPONENTS") or "ejs:github").strip()
+if _raw_rc.lower() in ("none", "off", "false", "-", "0"):
+    YTDLP_REMOTE_COMPONENTS: List[str] = []
+else:
+    YTDLP_REMOTE_COMPONENTS = [x.strip() for x in _raw_rc.split(",") if x.strip()]
 
 # Mini App URL (для кнопки в боте)
 MINI_APP_URL = os.environ.get("MINI_APP_URL")
