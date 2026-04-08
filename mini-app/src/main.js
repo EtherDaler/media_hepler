@@ -4,27 +4,20 @@ import router from './router'
 import App from './App.vue'
 import './styles/main.css'
 
-// Инициализация Telegram WebApp (на части клиентов, в т.ч. Desktop macOS, ready/expand теоретически могут бросить — тогда не выполнится весь модуль и будет белый экран)
+// Инициализация Telegram WebApp
 const tg = window.Telegram?.WebApp
 
 if (tg) {
-  try {
-    if (typeof tg.ready === 'function') tg.ready()
-    if (typeof tg.expand === 'function') tg.expand()
-  } catch (e) {
-    console.error('Telegram WebApp ready/expand:', e)
-  }
+  tg.ready()
+  tg.expand()
 
-  try {
-    document.documentElement.setAttribute('data-theme', tg.colorScheme || 'dark')
-    if (typeof tg.onEvent === 'function') {
-      tg.onEvent('themeChanged', () => {
-        document.documentElement.setAttribute('data-theme', tg.colorScheme || 'dark')
-      })
-    }
-  } catch (e) {
-    console.error('Telegram WebApp theme:', e)
-  }
+  // Устанавливаем тему
+  document.documentElement.setAttribute('data-theme', tg.colorScheme || 'dark')
+
+  // Слушаем изменение темы
+  tg.onEvent('themeChanged', () => {
+    document.documentElement.setAttribute('data-theme', tg.colorScheme)
+  })
 }
 
 const app = createApp(App)

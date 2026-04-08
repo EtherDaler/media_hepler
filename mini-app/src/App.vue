@@ -5,7 +5,7 @@
       <div class="tg-icon">📱</div>
       <h1>Media Helper</h1>
       <p>Это приложение работает только в Telegram</p>
-      <a href="https://t.me/your_bot" class="tg-link">Открыть в Telegram</a>
+      <a :href="botTelegramUrl" class="tg-link">Открыть в Telegram</a>
     </div>
   </div>
 
@@ -62,16 +62,14 @@ onUnmounted(() => {
   }
 })
 
-// В Telegram Mini App (в т.ч. Desktop для macOS initData иногда пустой — ориентируемся на WebApp + контекст)
-const isTelegram = computed(() => {
-  const w = window.Telegram?.WebApp
-  if (!w) return false
-  return Boolean(
-    w.initData ||
-      w.initDataUnsafe?.user ||
-      w.initDataUnsafe?.query_id ||
-      w.platform
-  )
+// Только реальный запуск из Telegram (есть initData для авторизации)
+const isTelegram = computed(() => !!window.Telegram?.WebApp?.initData)
+
+// Имя бота: в mini-app задайте VITE_BOT_USERNAME (см. .env.example); иначе значение по умолчанию из проекта
+const botTelegramUrl = computed(() => {
+  const raw = import.meta.env.VITE_BOT_USERNAME || 'django_media_helper_bot'
+  const name = String(raw).replace(/^@/, '').trim() || 'django_media_helper_bot'
+  return `https://t.me/${name}`
 })
 </script>
 
