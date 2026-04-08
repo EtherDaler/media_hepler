@@ -62,9 +62,16 @@ onUnmounted(() => {
   }
 })
 
-// Проверяем что открыто в Telegram
+// В Telegram Mini App (в т.ч. Desktop для macOS initData иногда пустой — ориентируемся на WebApp + контекст)
 const isTelegram = computed(() => {
-  return !!window.Telegram?.WebApp?.initData
+  const w = window.Telegram?.WebApp
+  if (!w) return false
+  return Boolean(
+    w.initData ||
+      w.initDataUnsafe?.user ||
+      w.initDataUnsafe?.query_id ||
+      w.platform
+  )
 })
 </script>
 
