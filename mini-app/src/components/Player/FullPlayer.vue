@@ -637,7 +637,7 @@ function goToQueue() {
   background: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: flex-end;
-  z-index: 200;
+  z-index: 1100;
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
 }

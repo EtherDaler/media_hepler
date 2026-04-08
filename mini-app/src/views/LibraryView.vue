@@ -135,34 +135,40 @@
 
     <!-- Create Playlist Modal -->
     <Teleport to="body">
-      <div v-if="showCreatePlaylist" class="modal-overlay" @click.self="showCreatePlaylist = false">
+      <Transition name="modal-center">
         <div
-          class="modal"
-          @click.stop
-          @touchstart="createPlaylistModalSwipe.touchStart"
-          @touchmove.passive="createPlaylistModalSwipe.touchMove"
-          @touchend="createPlaylistModalSwipe.touchEnd"
+          v-if="showCreatePlaylist"
+          class="modal-overlay modal-overlay-center"
+          @click.self="showCreatePlaylist = false"
         >
-          <h3 class="modal-title">Новый плейлист</h3>
-          <input
-            v-model="newPlaylistName"
-            type="text"
-            placeholder="Название плейлиста"
-            class="modal-input"
-            @keyup.enter="createPlaylist"
-          />
-          <div class="modal-actions">
-            <button class="modal-btn cancel" @click="showCreatePlaylist = false">Отмена</button>
-            <button 
-              class="modal-btn confirm" 
-              @click="createPlaylist"
-              :disabled="!newPlaylistName.trim()"
-            >
-              Создать
-            </button>
+          <div
+            class="modal"
+            @click.stop
+            @touchstart="createPlaylistModalSwipe.touchStart"
+            @touchmove.passive="createPlaylistModalSwipe.touchMove"
+            @touchend="createPlaylistModalSwipe.touchEnd"
+          >
+            <h3 class="modal-title">Новый плейлист</h3>
+            <input
+              v-model="newPlaylistName"
+              type="text"
+              placeholder="Название плейлиста"
+              class="modal-input"
+              @keyup.enter="createPlaylist"
+            />
+            <div class="modal-actions">
+              <button class="modal-btn cancel" @click="showCreatePlaylist = false">Отмена</button>
+              <button
+                class="modal-btn confirm"
+                @click="createPlaylist"
+                :disabled="!newPlaylistName.trim()"
+              >
+                Создать
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      </Transition>
     </Teleport>
   </div>
 </template>
@@ -477,6 +483,7 @@ function openBotChat() {
 .modal-overlay {
   position: fixed;
   inset: 0;
+  z-index: 1100;
   background: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
@@ -484,11 +491,17 @@ function openBotChat() {
   -webkit-backdrop-filter: blur(4px);
 }
 
+.modal-overlay-center {
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-lg);
+}
+
 .modal-overlay.bottom {
   align-items: flex-end;
   justify-content: center;
   padding: var(--spacing-lg);
-  z-index: 200;
+  z-index: 1100;
 }
 
 .modal {
@@ -701,6 +714,38 @@ function openBotChat() {
 .menu-enter-from .sync-modal,
 .menu-leave-to .sync-modal {
   transform: translateY(100%);
+}
+
+.menu-leave-active {
+  pointer-events: none;
+}
+
+/* Центральное модальное окно (новый плейлист) */
+.modal-center-enter-active,
+.modal-center-leave-active {
+  transition: opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.modal-center-enter-active .modal,
+.modal-center-leave-active .modal {
+  transition:
+    transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.modal-center-enter-from,
+.modal-center-leave-to {
+  opacity: 0;
+}
+
+.modal-center-enter-from .modal,
+.modal-center-leave-to .modal {
+  transform: scale(0.94) translateY(12px);
+  opacity: 0;
+}
+
+.modal-center-leave-active {
+  pointer-events: none;
 }
 </style>
 

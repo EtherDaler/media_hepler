@@ -1,26 +1,28 @@
 <template>
   <nav class="bottom-nav safe-bottom">
-    <router-link 
-      v-for="item in navItems" 
+    <button
+      v-for="item in navItems"
       :key="item.path"
-      :to="item.path"
+      type="button"
       class="nav-item"
       :class="{ active: isActive(item.path) }"
+      :aria-current="isActive(item.path) ? 'page' : undefined"
+      @click="go(item.path)"
     >
       <component :is="item.icon" class="nav-icon" />
       <span class="nav-label">{{ item.label }}</span>
-    </router-link>
+    </button>
   </nav>
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import IconHome from '../Common/icons/IconHome.vue'
 import IconSearch from '../Common/icons/IconSearch.vue'
 import IconLibrary from '../Common/icons/IconLibrary.vue'
 
 const route = useRoute()
+const router = useRouter()
 
 const navItems = [
   { path: '/', label: 'Главная', icon: IconHome },
@@ -32,7 +34,11 @@ function isActive(path) {
   if (path === '/') {
     return route.path === '/'
   }
-  return route.path.startsWith(path)
+  return route.path === path || route.path.startsWith(`${path}/`)
+}
+
+function go(path) {
+  router.push(path).catch(() => {})
 }
 </script>
 
@@ -49,18 +55,27 @@ function isActive(path) {
   display: flex;
   justify-content: space-around;
   align-items: center;
-  z-index: 100;
+  z-index: 1000;
   border-top: 1px solid var(--border);
+  touch-action: manipulation;
 }
 
 .nav-item {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 2px;
-  padding: var(--spacing-sm) var(--spacing-lg);
+  padding: var(--spacing-sm) var(--spacing-md);
   color: var(--text-secondary);
   transition: color var(--transition-fast);
+  background: none;
+  border: none;
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .nav-item.active {

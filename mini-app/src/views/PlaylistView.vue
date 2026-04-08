@@ -59,27 +59,29 @@
 
     <!-- Menu -->
     <Teleport to="body">
-      <div v-if="showMenu" class="menu-overlay" @click.self="showMenu = false">
-        <div
-          class="menu"
-          @click.stop
-          @touchstart="playlistMenuSwipe.touchStart"
-          @touchmove.passive="playlistMenuSwipe.touchMove"
-          @touchend="playlistMenuSwipe.touchEnd"
-        >
-          <button class="menu-item" @click="editPlaylist">
-            <IconEdit />
-            <span>Редактировать</span>
-          </button>
-          <button class="menu-item danger" @click="deletePlaylist">
-            <IconDelete />
-            <span>Удалить плейлист</span>
-          </button>
-          <button class="menu-item" @click="showMenu = false">
-            <span>Отмена</span>
-          </button>
+      <Transition name="menu">
+        <div v-if="showMenu" class="menu-overlay" @click.self="showMenu = false">
+          <div
+            class="menu"
+            @click.stop
+            @touchstart="playlistMenuSwipe.touchStart"
+            @touchmove.passive="playlistMenuSwipe.touchMove"
+            @touchend="playlistMenuSwipe.touchEnd"
+          >
+            <button class="menu-item" @click="editPlaylist">
+              <IconEdit />
+              <span>Редактировать</span>
+            </button>
+            <button class="menu-item danger" @click="deletePlaylist">
+              <IconDelete />
+              <span>Удалить плейлист</span>
+            </button>
+            <button class="menu-item" @click="showMenu = false">
+              <span>Отмена</span>
+            </button>
+          </div>
         </div>
-      </div>
+      </Transition>
     </Teleport>
   </div>
 </template>
@@ -320,7 +322,7 @@ async function deletePlaylist() {
   background: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: flex-end;
-  z-index: 200;
+  z-index: 1100;
 }
 
 .menu {
@@ -352,6 +354,33 @@ async function deletePlaylist() {
 .menu-item svg {
   width: 22px;
   height: 22px;
+}
+
+/* Анимация нижнего меню (как в TrackItem) */
+.menu-enter-active,
+.menu-leave-active {
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), backdrop-filter 0.3s ease;
+}
+
+.menu-enter-active .menu,
+.menu-leave-active .menu {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.menu-enter-from,
+.menu-leave-to {
+  background: rgba(0, 0, 0, 0);
+  backdrop-filter: blur(0);
+  -webkit-backdrop-filter: blur(0);
+}
+
+.menu-enter-from .menu,
+.menu-leave-to .menu {
+  transform: translateY(100%);
+}
+
+.menu-leave-active {
+  pointer-events: none;
 }
 </style>
 

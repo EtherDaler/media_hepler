@@ -20,7 +20,9 @@
     </main>
 
     <!-- Full Player (overlay) -->
-    <FullPlayer v-if="showFullPlayer" @close="showFullPlayer = false" />
+    <Transition name="player-sheet">
+      <FullPlayer v-if="showFullPlayer" @close="showFullPlayer = false" />
+    </Transition>
 
     <!-- Bottom Player -->
     <MiniPlayer 
@@ -94,6 +96,20 @@ const isTelegram = computed(() => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* Full player: съезд вниз при закрытии (классы на корне FullPlayer — :deep) */
+:deep(.player-sheet-enter-active),
+:deep(.player-sheet-leave-active) {
+  transition:
+    transform 0.32s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+:deep(.player-sheet-enter-from),
+:deep(.player-sheet-leave-to) {
+  opacity: 0;
+  transform: translateY(100%);
 }
 
 /* Not Telegram Screen */
