@@ -149,6 +149,14 @@
               <IconQueue />
               <span>Очередь воспроизведения</span>
             </button>
+            <button
+              v-if="currentTrack?.id"
+              class="menu-item"
+              @click="openAddToPlaylist"
+            >
+              <IconLibrary />
+              <span>Добавить в плейлист</span>
+            </button>
             <button class="menu-item cancel" @click="showMenu = false">
               <span>Отмена</span>
             </button>
@@ -156,6 +164,14 @@
         </div>
       </Transition>
     </Teleport>
+
+    <AddToPlaylistSheet
+      v-if="currentTrack?.id"
+      v-model="showPlaylistSheet"
+      :audio-id="currentTrack.id"
+      :track-title="currentTrack?.title"
+      @favorite-changed="onPlaylistFavoriteChanged"
+    />
   </div>
 </template>
 
@@ -181,12 +197,15 @@ import IconRepeatOne from '../Common/icons/IconRepeatOne.vue'
 import IconHeart from '../Common/icons/IconHeart.vue'
 import IconQueue from '../Common/icons/IconQueue.vue'
 import IconShare from '../Common/icons/IconShare.vue'
+import IconLibrary from '../Common/icons/IconLibrary.vue'
+import AddToPlaylistSheet from '../Playlist/AddToPlaylistSheet.vue'
 
 const emit = defineEmits(['close'])
 const router = useRouter()
 
 const playerStore = usePlayerStore()
 const showMenu = ref(false)
+const showPlaylistSheet = ref(false)
 const scrollContainer = ref(null)
 const progressBar = ref(null)
 
@@ -277,13 +296,22 @@ onUnmounted(() => {
 
 async function toggleFavorite() {
   if (!currentTrack.value) return
-  
+
   try {
     const result = await api.toggleFavorite(currentTrack.value.id)
-    currentTrack.value.is_favorite = result.is_favorite
+    playerStore.applyTrackFavorite(currentTrack.value.id, result.is_favorite)
   } catch (error) {
     console.error('Failed to toggle favorite:', error)
   }
+}
+
+function openAddToPlaylist() {
+  showMenu.value = false
+  showPlaylistSheet.value = true
+}
+
+function onPlaylistFavoriteChanged({ audioId, isFavorite }) {
+  playerStore.applyTrackFavorite(audioId, isFavorite)
 }
 
 function openQueue() {
@@ -690,26 +718,28 @@ function goToQueue() {
   color: var(--text-secondary);
 }
 
-/* Menu Animation */
 .menu-enter-active,
 .menu-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity var(--motion-duration-overlay) var(--motion-ease-standard);
 }
 
 .menu-enter-active .menu,
 .menu-leave-active .menu {
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform var(--motion-duration-sheet) var(--motion-ease-sheet);
 }
 
 .menu-enter-from,
 .menu-leave-to {
-  background: rgba(0, 0, 0, 0);
-  backdrop-filter: blur(0);
+  opacity: 0;
 }
 
 .menu-enter-from .menu,
 .menu-leave-to .menu {
   transform: translateY(100%);
+}
+
+.menu-leave-active {
+  pointer-events: none;
 }
 </style>
 

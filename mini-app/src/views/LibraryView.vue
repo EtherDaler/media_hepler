@@ -695,20 +695,19 @@ function openBotChat() {
   color: var(--text-primary);
 }
 
-/* Menu Animation */
 .menu-enter-active,
 .menu-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity var(--motion-duration-overlay) var(--motion-ease-standard);
 }
 
 .menu-enter-active .sync-modal,
 .menu-leave-active .sync-modal {
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform var(--motion-duration-sheet) var(--motion-ease-sheet);
 }
 
 .menu-enter-from,
 .menu-leave-to {
-  background: rgba(0, 0, 0, 0);
+  opacity: 0;
 }
 
 .menu-enter-from .sync-modal,
@@ -720,17 +719,17 @@ function openBotChat() {
   pointer-events: none;
 }
 
-/* Центральное модальное окно (новый плейлист) */
+/* Центральное модальное окно (диалоги Spotify: лёгкий scale + сдвиг) */
 .modal-center-enter-active,
 .modal-center-leave-active {
-  transition: opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity var(--motion-duration-modal) var(--motion-ease-standard);
 }
 
 .modal-center-enter-active .modal,
 .modal-center-leave-active .modal {
   transition:
-    transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    transform var(--motion-duration-modal) var(--motion-ease-emphasized),
+    opacity var(--motion-duration-modal) var(--motion-ease-standard);
 }
 
 .modal-center-enter-from,
@@ -740,7 +739,7 @@ function openBotChat() {
 
 .modal-center-enter-from .modal,
 .modal-center-leave-to .modal {
-  transform: scale(0.94) translateY(12px);
+  transform: scale(0.92) translateY(16px);
   opacity: 0;
 }
 

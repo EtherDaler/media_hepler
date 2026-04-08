@@ -1,6 +1,6 @@
 """Команды для работы с аудио, плейлистами и избранным"""
 
-from typing import Optional, List
+from typing import Optional, List, Set
 from sqlalchemy import select, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -146,6 +146,19 @@ async def get_user_playlists(session: AsyncSession, user_id: int) -> List[Playli
         .order_by(Playlist.updated_at.desc())
     )
     return result.scalars().all()
+
+
+async def get_playlist_ids_containing_audio(
+    session: AsyncSession, user_id: int, audio_id: int
+) -> Set[int]:
+    """ID плейлистов пользователя, в которых есть этот трек."""
+    result = await session.execute(
+        select(Playlist.id)
+        .join(PlaylistTrack, PlaylistTrack.playlist_id == Playlist.id)
+        .where(Playlist.user_id == user_id)
+        .where(PlaylistTrack.audio_id == audio_id)
+    )
+    return set(result.scalars().all())
 
 
 async def get_playlist_by_id(session: AsyncSession, playlist_id: int) -> Optional[Playlist]:

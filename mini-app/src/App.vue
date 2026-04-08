@@ -90,7 +90,7 @@ const isTelegram = computed(() => {
 /* Transitions */
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.2s ease;
+  transition: opacity var(--motion-duration-page) var(--motion-ease-standard);
 }
 
 .fade-enter-from,
@@ -99,16 +99,14 @@ const isTelegram = computed(() => {
 }
 
 /* Full player: съезд вниз при закрытии (классы на корне FullPlayer — :deep) */
+/* Полноэкранный плеер: как в Spotify — в основном слайд снизу, без лишнего fade */
 :deep(.player-sheet-enter-active),
 :deep(.player-sheet-leave-active) {
-  transition:
-    transform 0.32s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform var(--motion-duration-player) var(--motion-ease-sheet);
 }
 
 :deep(.player-sheet-enter-from),
 :deep(.player-sheet-leave-to) {
-  opacity: 0;
   transform: translateY(100%);
 }
 

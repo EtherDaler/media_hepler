@@ -48,6 +48,7 @@
           :show-index="true"
           :tracklist="playlist.tracks"
           @toggle-favorite="handleToggleFavorite"
+          @playlist-membership="onTrackPlaylistMembership"
         />
       </div>
 
@@ -142,6 +143,20 @@ async function handleToggleFavorite(track) {
     track.is_favorite = result.is_favorite
   } catch (error) {
     console.error('Failed to toggle favorite:', error)
+  }
+}
+
+async function onTrackPlaylistMembership({ playlistId, audioId, hasTrack }) {
+  if (!playlist.value || playlist.value.id !== playlistId) return
+  if (!hasTrack) {
+    playlist.value.tracks = playlist.value.tracks.filter((t) => t.id !== audioId)
+    playlist.value.track_count = playlist.value.tracks.length
+  } else {
+    try {
+      playlist.value = await api.getPlaylist(playlistId)
+    } catch (error) {
+      console.error('Failed to refresh playlist:', error)
+    }
   }
 }
 
@@ -356,22 +371,19 @@ async function deletePlaylist() {
   height: 22px;
 }
 
-/* Анимация нижнего меню (как в TrackItem) */
 .menu-enter-active,
 .menu-leave-active {
-  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), backdrop-filter 0.3s ease;
+  transition: opacity var(--motion-duration-overlay) var(--motion-ease-standard);
 }
 
 .menu-enter-active .menu,
 .menu-leave-active .menu {
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform var(--motion-duration-sheet) var(--motion-ease-sheet);
 }
 
 .menu-enter-from,
 .menu-leave-to {
-  background: rgba(0, 0, 0, 0);
-  backdrop-filter: blur(0);
-  -webkit-backdrop-filter: blur(0);
+  opacity: 0;
 }
 
 .menu-enter-from .menu,

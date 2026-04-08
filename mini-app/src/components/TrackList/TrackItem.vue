@@ -88,6 +88,14 @@
               <IconQueue />
               <span>Добавить в очередь</span>
             </button>
+            <button
+              v-if="canAddToPlaylist"
+              class="menu-item"
+              @click="openAddToPlaylist"
+            >
+              <IconLibrary />
+              <span>Добавить в плейлист</span>
+            </button>
             <button 
               class="menu-item"
               :class="{ active: track.is_favorite }"
@@ -103,6 +111,15 @@
         </div>
       </Transition>
     </Teleport>
+
+    <AddToPlaylistSheet
+      v-if="canAddToPlaylist"
+      v-model="showPlaylistSheet"
+      :audio-id="track.id"
+      :track-title="track.title"
+      @favorite-changed="onSheetFavoriteChanged"
+      @playlist-membership="onSheetPlaylistMembership"
+    />
   </div>
 </template>
 
@@ -110,11 +127,13 @@
 import { ref, computed } from 'vue'
 import { usePlayerStore } from '../../stores/playerStore'
 import { useSwipeDownDismiss } from '../../composables/useSwipeDownDismiss'
+import AddToPlaylistSheet from '../Playlist/AddToPlaylistSheet.vue'
 import IconMusic from '../Common/icons/IconMusic.vue'
 import IconHeart from '../Common/icons/IconHeart.vue'
 import IconMore from '../Common/icons/IconMore.vue'
 import IconNext from '../Common/icons/IconNext.vue'
 import IconQueue from '../Common/icons/IconQueue.vue'
+import IconLibrary from '../Common/icons/IconLibrary.vue'
 
 const props = defineProps({
   track: {
@@ -135,10 +154,15 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['toggleFavorite'])
+const emit = defineEmits(['toggleFavorite', 'playlist-membership'])
 
 const playerStore = usePlayerStore()
 const showMenu = ref(false)
+const showPlaylistSheet = ref(false)
+
+const canAddToPlaylist = computed(
+  () => props.track != null && Number.isFinite(Number(props.track.id))
+)
 
 const menuSwipe = useSwipeDownDismiss(() => {
   showMenu.value = false
@@ -181,6 +205,22 @@ function addToQueueNext() {
 function toggleFavorite() {
   emit('toggleFavorite', props.track)
   showMenu.value = false
+}
+
+function openAddToPlaylist() {
+  showMenu.value = false
+  showPlaylistSheet.value = true
+}
+
+function onSheetFavoriteChanged({ audioId, isFavorite }) {
+  if (props.track.id === audioId) {
+    props.track.is_favorite = isFavorite
+  }
+  playerStore.applyTrackFavorite(audioId, isFavorite)
+}
+
+function onSheetPlaylistMembership(payload) {
+  emit('playlist-membership', payload)
 }
 </script>
 
@@ -485,26 +525,29 @@ function toggleFavorite() {
   color: var(--accent);
 }
 
-/* Menu Animation */
+/* Нижнее меню: затемнение + шторка синхронно (как в Spotify) */
 .menu-enter-active,
 .menu-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity var(--motion-duration-overlay) var(--motion-ease-standard);
 }
 
 .menu-enter-active .menu,
 .menu-leave-active .menu {
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform var(--motion-duration-sheet) var(--motion-ease-sheet);
 }
 
 .menu-enter-from,
 .menu-leave-to {
-  background: rgba(0, 0, 0, 0);
-  backdrop-filter: blur(0);
+  opacity: 0;
 }
 
 .menu-enter-from .menu,
 .menu-leave-to .menu {
   transform: translateY(100%);
+}
+
+.menu-leave-active {
+  pointer-events: none;
 }
 </style>
 

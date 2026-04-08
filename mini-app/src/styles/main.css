@@ -48,10 +48,25 @@
   --radius-xl: 20px;
   --radius-full: 9999px;
   
-  /* Transitions */
+  /* Transitions (micro-interactions) */
   --transition-fast: 150ms ease;
   --transition-normal: 250ms ease;
   --transition-slow: 350ms ease;
+
+  /*
+   * Motion — как в Spotify mobile:
+   * нижние шторы ~320–360ms, плавное замедление в конце;
+   * затемнение фона синхронно с движением панели;
+   * полноэкранный плеер чуть дольше для акцента.
+   */
+  --motion-ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+  --motion-ease-emphasized: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --motion-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --motion-duration-sheet: 0.34s;
+  --motion-duration-overlay: 0.34s;
+  --motion-duration-modal: 0.3s;
+  --motion-duration-player: 0.4s;
+  --motion-duration-page: 0.2s;
   
   /* Typography */
   --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
@@ -204,5 +219,15 @@ img {
 
 .safe-top {
   padding-top: env(safe-area-inset-top);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration-sheet: 0.01ms;
+    --motion-duration-overlay: 0.01ms;
+    --motion-duration-modal: 0.01ms;
+    --motion-duration-player: 0.01ms;
+    --motion-duration-page: 0.01ms;
+  }
 }
 

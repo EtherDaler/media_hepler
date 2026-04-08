@@ -82,6 +82,21 @@ class PlaylistListResponse(BaseModel):
     items: List[PlaylistResponse]
 
 
+class PlaylistPickerItem(BaseModel):
+    """Строка для выбора плейлиста (избранное + пользовательские плейлисты)."""
+
+    playlist_id: Optional[int] = None  # None для псевдо-строки «Избранное»
+    is_favorites: bool = False
+    name: str
+    track_count: int = 0
+    has_track: bool  # трек в плейлисте или в избранном (для is_favorites)
+
+
+class PlaylistPickerListResponse(BaseModel):
+    items: List[PlaylistPickerItem]
+    audio_id: int
+
+
 # ==================== Favorites ====================
 
 class FavoriteResponse(BaseModel):

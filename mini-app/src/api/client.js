@@ -87,6 +87,14 @@ export const api = {
   async getPlaylists() {
     return fetchApi('/playlists')
   },
+
+  /**
+   * Плейлисты + «Избранное» с отметкой, входит ли трек (для модалки добавления).
+   */
+  async getPlaylistPicker(audioId) {
+    const q = new URLSearchParams({ audio_id: String(audioId) }).toString()
+    return fetchApi(`/playlists/picker?${q}`)
+  },
   
   /**
    * Получить плейлист с треками

@@ -1,7 +1,7 @@
 """Роуты для плейлистов"""
 
-from typing import Set
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Set, List
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -12,6 +12,8 @@ from api.schemas import (
     PlaylistResponse, 
     PlaylistWithTracksResponse,
     PlaylistListResponse,
+    PlaylistPickerListResponse,
+    PlaylistPickerItem,
     AddToPlaylistRequest,
     ReorderTracksRequest,
     AudioResponse
@@ -20,6 +22,7 @@ from api.routes.audio import get_cover_url_for_audio
 from db.audio_commands import (
     create_playlist,
     get_user_playlists,
+    get_playlist_ids_containing_audio,
     get_playlist_by_id,
     update_playlist,
     delete_playlist,
@@ -65,6 +68,46 @@ async def list_playlists(
             for p in playlists
         ]
     )
+
+
+@router.get("/picker", response_model=PlaylistPickerListResponse)
+async def playlist_picker(
+    audio_id: int = Query(..., description="ID аудио в библиотеке"),
+    user_id: int = Depends(get_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Плейлисты и избранное с отметкой, входит ли трек в каждый список."""
+    audio = await get_audio_by_id(db, audio_id)
+    if not audio or audio.user_id != user_id:
+        raise HTTPException(status_code=404, detail="Audio not found")
+
+    fav_ids = await get_favorite_audio_ids(db, user_id)
+    in_favorites = audio_id in fav_ids
+
+    playlists = await get_user_playlists(db, user_id)
+    playlist_ids_with_track = await get_playlist_ids_containing_audio(db, user_id, audio_id)
+
+    items: List[PlaylistPickerItem] = [
+        PlaylistPickerItem(
+            playlist_id=None,
+            is_favorites=True,
+            name="Избранное",
+            track_count=len(fav_ids),
+            has_track=in_favorites,
+        )
+    ]
+    for p in playlists:
+        items.append(
+            PlaylistPickerItem(
+                playlist_id=p.id,
+                is_favorites=False,
+                name=p.name,
+                track_count=len(p.tracks) if p.tracks else 0,
+                has_track=p.id in playlist_ids_with_track,
+            )
+        )
+
+    return PlaylistPickerListResponse(items=items, audio_id=audio_id)
 
 
 @router.post("", response_model=PlaylistResponse)

@@ -563,6 +563,16 @@ export const usePlayerStore = defineStore('player', () => {
     queueIndex.value = 0
   }
 
+  /** Синхронизировать флаг избранного в текущем треке и очереди (после модалки плейлистов). */
+  function applyTrackFavorite(audioId, isFavorite) {
+    if (currentTrack.value?.id === audioId) {
+      currentTrack.value = { ...currentTrack.value, is_favorite: isFavorite }
+    }
+    queue.value = queue.value.map((t) =>
+      t?.id === audioId ? { ...t, is_favorite: isFavorite } : t
+    )
+  }
+
   return {
     // State
     currentTrack,
@@ -605,7 +615,8 @@ export const usePlayerStore = defineStore('player', () => {
     removeFromQueue,
     moveInQueue,
     playFromQueue,
-    clearQueue
+    clearQueue,
+    applyTrackFavorite
   }
 })
 
