@@ -75,6 +75,110 @@ def _has_default_yt_cookie_file() -> bool:
     return _resolve_yt_cookie_path() is not None
 
 
+def _resolve_instagram_cookie_path(cookie_suffix: str) -> Optional[str]:
+    """instagram{N}.txt у cwd или в корне репозитория (рядом с worker.py)."""
+    name = f"instagram{cookie_suffix}.txt"
+    p = Path(name).expanduser()
+    if p.is_file():
+        return str(p.resolve())
+    alt = _project_root() / name
+    if alt.is_file():
+        return str(alt.resolve())
+    return None
+
+
+def _apply_youtube_proxy_to_ydl_opts(ydl_opts: Dict[str, Any], proxy: Optional[Dict]) -> None:
+    """
+    Тот же прокси, что для YouTube (PROXY / SIMPLE_PROXY): только URL в yt-dlp + ALL_PROXY.
+    Файл cookie из записи прокси не подставляем — для Instagram нужны instagram*.txt.
+    """
+    ydl_opts.pop("proxy", None)
+    if not proxy:
+        os.environ.pop("ALL_PROXY", None)
+        os.environ.pop("HTTP_PROXY", None)
+        os.environ.pop("HTTPS_PROXY", None)
+        return
+    keys = [k for k in proxy.keys() if k is not None and str(k).strip()]
+    if not keys:
+        logger.warning("Instagram/прокси: пустой ключ URL, пропуск записи")
+        os.environ.pop("ALL_PROXY", None)
+        os.environ.pop("HTTP_PROXY", None)
+        os.environ.pop("HTTPS_PROXY", None)
+        return
+    proxy_url = keys[0]
+    p = str(proxy_url).rstrip("/")
+    ydl_opts["proxy"] = p
+    try:
+        prev = int(ydl_opts.get("socket_timeout") or 0)
+    except (TypeError, ValueError):
+        prev = 0
+    ydl_opts["socket_timeout"] = max(prev, 150)
+    os.environ["ALL_PROXY"] = p
+    os.environ.pop("HTTP_PROXY", None)
+    os.environ.pop("HTTPS_PROXY", None)
+
+
+def _instagram_reels_ydl_opts(
+    outtmpl: str,
+    tmp_cookie_path: str,
+) -> Dict[str, Any]:
+    return {
+        "outtmpl": outtmpl,
+        "cookiefile": tmp_cookie_path,
+        "format": "bestvideo[height<=1080]+bestaudio/bestvideo+bestaudio/best",
+        "merge_output_format": "mp4",
+        "format_sort": ["res:1080", "vcodec:h264", "acodec:aac"],
+        "http_headers": {
+            "User-Agent": (
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) "
+                "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 "
+                "Mobile/15E148 Safari/604.1"
+            )
+        },
+        "noplaylist": True,
+        "socket_timeout": 30,
+        "retries": 3,
+    }
+
+
+def _instagram_reel_shortcode_from_url(url: str) -> Optional[str]:
+    """Короткий код из /reel/CODE (та же логика, что regex в v1)."""
+    m = re.search(r"reel/([^/?#]+)", url, re.IGNORECASE)
+    if not m:
+        return None
+    code = (m.group(1) or "").strip()
+    return code or None
+
+
+def _find_reels_temp_media(path: str, base_filename: str) -> Optional[str]:
+    """Путь к файлу после yt-dlp по шаблону {base_filename}_temp.*"""
+    p = Path(path)
+    if not p.is_dir():
+        return None
+    prefix = f"{base_filename}_temp."
+    matches = sorted(f for f in p.iterdir() if f.is_file() and f.name.startswith(prefix))
+    if not matches:
+        return None
+    for ext in (".mp4", ".mkv", ".webm"):
+        for f in matches:
+            if f.suffix.lower() == ext:
+                return str(f.resolve())
+    return str(matches[0].resolve())
+
+
+def _cleanup_reels_temp_prefix(path: str, base_filename: str) -> None:
+    p = Path(path)
+    if not p.is_dir():
+        return
+    prefix = f"{base_filename}_temp."
+    for f in p.iterdir():
+        if f.is_file() and f.name.startswith(prefix):
+            try:
+                f.unlink()
+            except OSError:
+                pass
+
+
 def _effective_bgutil_base_url() -> str:
     """
     URL HTTP-провайдера bgutil для yt-dlp (в extractor_args → непустой base_url, иначе плагин шлёт /ping на "").
@@ -326,19 +430,26 @@ def get_yt_dlp_conf(path, proxy=None, player_client=None, *, skip_po_token: bool
             logger.debug("Using YouTube cookies: %s", _cookie_path)
 
     if proxy:
-        proxy_url = list(proxy.keys())[0]
-        proxy_cookie = proxy[proxy_url]
-        p = str(proxy_url).rstrip('/')
-        ydl_opts['proxy'] = p
-        # Используем временную копию cookies для прокси тоже
-        temp_proxy_cookie = get_temp_cookie_copy(proxy_cookie)
-        if temp_proxy_cookie:
-            ydl_opts['cookiefile'] = temp_proxy_cookie
-        ydl_opts['socket_timeout'] = 150
-        # ставим env на всякий случай, очищаем HTTP_PROXY/HTTPS_PROXY
-        os.environ['ALL_PROXY'] = p
-        os.environ.pop('HTTP_PROXY', None)
-        os.environ.pop('HTTPS_PROXY', None)
+        keys = [k for k in proxy.keys() if k is not None and str(k).strip()]
+        if not keys:
+            logger.warning("get_yt_dlp_conf: пропуск записи прокси с пустым URL")
+            os.environ.pop('ALL_PROXY', None)
+            os.environ.pop('HTTP_PROXY', None)
+            os.environ.pop('HTTPS_PROXY', None)
+        else:
+            proxy_url = keys[0]
+            proxy_cookie = proxy[proxy_url]
+            p = str(proxy_url).rstrip('/')
+            ydl_opts['proxy'] = p
+            # Используем временную копию cookies для прокси тоже
+            temp_proxy_cookie = get_temp_cookie_copy(proxy_cookie)
+            if temp_proxy_cookie:
+                ydl_opts['cookiefile'] = temp_proxy_cookie
+            ydl_opts['socket_timeout'] = 150
+            # ставим env на всякий случай, очищаем HTTP_PROXY/HTTPS_PROXY
+            os.environ['ALL_PROXY'] = p
+            os.environ.pop('HTTP_PROXY', None)
+            os.environ.pop('HTTPS_PROXY', None)
 
     else:
         # гарантия, что при вызове без прокси окружение не использует старый прокси
@@ -1087,10 +1198,7 @@ def reencode_video(path_to_video):
     return output_path
 
 def _download_instagram_reels_sync(reels_url):
-    """Синхронная функция скачивания Instagram reels (внутренняя)"""
-    import shutil
-    import tempfile
-    
+    """Синхронная функция скачивания Instagram reels (внутренняя). Сначала без прокси, затем те же прокси, что у YouTube."""
     path = "./videos/reels"
     os.makedirs(path, exist_ok=True)
     match = re.search(r"reel/([^/?]+)", reels_url)
@@ -1100,51 +1208,55 @@ def _download_instagram_reels_sync(reels_url):
         filename = filename + f"({ind})"
         ind += 1
     filename = filename.strip()
-    cookies = ['0', '1', '2']
-    while len(cookies) > 0:
-        cookie = random.choice(cookies)
-        original_cookie_path = f'./instagram{cookie}.txt'
-        tmp_cookie_path = None
-        
-        # Создаём временную копию файла с куками, чтобы yt-dlp не перезаписал оригинал
-        # Используем shutil.copy2 для точного бинарного копирования
-        try:
-            if not os.path.exists(original_cookie_path):
-                raise FileNotFoundError(f"Cookie file not found: {original_cookie_path}")
-            
-            # Создаём временный файл и копируем туда куки
-            tmp_fd, tmp_cookie_path = tempfile.mkstemp(suffix='.txt')
-            os.close(tmp_fd)
-            shutil.copy2(original_cookie_path, tmp_cookie_path)
-        except FileNotFoundError:
-            logger.warning(f"Cookie file not found: {original_cookie_path}")
-            cookies.remove(cookie)
-            continue
-        
-        try:
-            ydl_opts = {
-                'outtmpl': f"{path}/{filename}.%(ext)s",
-                'cookiefile': tmp_cookie_path,  # Используем временную копию
-                # Приоритет: лучшее видео (до 1080p) + аудио, иначе лучший комбинированный
-                'format': 'bestvideo[height<=1080]+bestaudio/bestvideo+bestaudio/best',
-                'merge_output_format': 'mp4',  # Гарантируем mp4 на выходе
-                # Сортировка форматов: приоритет качеству и разрешению
-                'format_sort': ['res:1080', 'vcodec:h264', 'acodec:aac'],
-                'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
-                },
-                'noplaylist': True,
-            }
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([reels_url])
-            return f"{path}/{filename}.mp4"
-        except Exception as e:
-            cookies.remove(cookie)
-            logger.error(f"Failed with cookie {cookie}: {e}")
-        finally:
-            # Удаляем временный файл
-            if tmp_cookie_path and os.path.exists(tmp_cookie_path):
-                os.remove(tmp_cookie_path)
+
+    cookie_slots = ["0", "1", "2"]
+    random.shuffle(cookie_slots)
+    proxy_phases: List[Optional[Dict]] = [None]
+    try:
+        rest = list(_all_proxy_candidates())
+        random.shuffle(rest)
+        proxy_phases.extend(rest)
+    except Exception as e:
+        logger.warning("Instagram reels: не удалось разобрать список прокси: %s", e)
+
+    for proxy in proxy_phases:
+        for cookie in list(cookie_slots):
+            original = _resolve_instagram_cookie_path(cookie)
+            if not original:
+                continue
+            tmp_cookie_path = None
+            try:
+                tmp_fd, tmp_cookie_path = tempfile.mkstemp(suffix=".txt")
+                os.close(tmp_fd)
+                shutil.copy2(original, tmp_cookie_path)
+                ydl_opts = _instagram_reels_ydl_opts(
+                    f"{path}/{filename}.%(ext)s",
+                    tmp_cookie_path,
+                )
+                _apply_youtube_proxy_to_ydl_opts(ydl_opts, proxy)
+                label = "direct" if proxy is None else next(iter(proxy.keys()), "?")
+                logger.info(
+                    "Instagram reels: download try cookie=%s proxy=%s",
+                    cookie,
+                    label,
+                )
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([reels_url])
+                return f"{path}/{filename}.mp4"
+            except Exception as e:
+                logger.error(
+                    "Instagram reels failed cookie=%s proxy=%s: %s",
+                    cookie,
+                    "direct" if proxy is None else next(iter(proxy.keys()), "?"),
+                    e,
+                )
+            finally:
+                if tmp_cookie_path and os.path.exists(tmp_cookie_path):
+                    try:
+                        os.remove(tmp_cookie_path)
+                    except OSError:
+                        pass
+                _apply_youtube_proxy_to_ydl_opts({}, None)
     return None
 
 
@@ -1157,98 +1269,117 @@ def _download_instagram_reels_sync_v2(reels_url):
     """
     Скачивание Instagram reels с автоматическим перекодированием для iOS.
     Скачивает видео, затем перекодирует через ffmpeg в одной функции.
-    
+    Сначала без прокси, затем те же прокси, что у YouTube.
+
     Для тестирования: python worker.py, затем выбрать вариант 9 и ввести ссылку.
     """
-    import shutil
-    import tempfile
-    
     path = "./videos/reels"
     os.makedirs(path, exist_ok=True)
-    i = reels_url.find("reel")
-    j = reels_url[i+5:].find('/')
-    filename = reels_url[i+5:i+5+j]
+    filename = _instagram_reel_shortcode_from_url(reels_url) or "instagram_video"
     ind = 0
     while os.path.isfile(f"{path}/{filename}.mp4") or os.path.isfile(f"{path}/{filename}_ios.mp4"):
         filename = filename + f"({ind})"
         ind += 1
     filename = filename.strip()
-    cookies = ['0', '1', '2']
-    
-    while len(cookies) > 0:
-        cookie = random.choice(cookies)
-        original_cookie_path = f'./instagram{cookie}.txt'
-        tmp_cookie_path = None
-        
-        try:
-            if not os.path.exists(original_cookie_path):
-                raise FileNotFoundError(f"Cookie file not found: {original_cookie_path}")
-            
-            tmp_fd, tmp_cookie_path = tempfile.mkstemp(suffix='.txt')
-            os.close(tmp_fd)
-            shutil.copy2(original_cookie_path, tmp_cookie_path)
-        except FileNotFoundError:
-            logger.warning(f"Cookie file not found: {original_cookie_path}")
-            cookies.remove(cookie)
-            continue
-        
-        try:
-            # Шаг 1: Скачиваем видео
-            temp_file = f"{path}/{filename}_temp.mp4"
-            ydl_opts = {
-                'outtmpl': f"{path}/{filename}_temp.%(ext)s",
-                'cookiefile': tmp_cookie_path,
-                'format': 'bestvideo[height<=1080]+bestaudio/bestvideo+bestaudio/best',
-                'merge_output_format': 'mp4',
-                'format_sort': ['res:1080', 'vcodec:h264', 'acodec:aac'],
-                'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
-                },
-                'noplaylist': True,
-            }
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([reels_url])
-            
-            # Шаг 2: Перекодируем для iOS
-            output_file = f"{path}/{filename}.mp4"
-            ffmpeg_cmd = [
-                'ffmpeg', '-i', temp_file,
-                '-c:v', 'libx264',
-                '-preset', 'ultrafast',
-                '-crf', '23',
-                '-profile:v', 'baseline',
-                '-level', '3.1',
-                '-pix_fmt', 'yuv420p',
-                '-c:a', 'aac',
-                '-b:a', '128k',
-                '-movflags', '+faststart',
-                '-y',
-                output_file
-            ]
-            logger.info(f"Running ffmpeg: {' '.join(ffmpeg_cmd)}")
-            result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
-            
-            if result.returncode != 0:
-                logger.error(f"FFmpeg error: {result.stderr}")
-                return None
-            
-            # Удаляем временный файл
-            if os.path.isfile(temp_file):
-                os.remove(temp_file)
-            
-            logger.info(f"Downloaded and encoded for iOS: {output_file}")
-            return output_file
-            
-        except Exception as e:
-            cookies.remove(cookie)
-            logger.error(f"Failed with cookie {cookie}: {e}")
-            # Очистка при ошибке
-            temp_file = f"{path}/{filename}_temp.mp4"
-            if os.path.isfile(temp_file):
-                os.remove(temp_file)
-        finally:
-            if tmp_cookie_path and os.path.exists(tmp_cookie_path):
-                os.remove(tmp_cookie_path)
+
+    cookie_slots = ["0", "1", "2"]
+    random.shuffle(cookie_slots)
+    proxy_phases: List[Optional[Dict]] = [None]
+    try:
+        rest = list(_all_proxy_candidates())
+        random.shuffle(rest)
+        proxy_phases.extend(rest)
+    except Exception as e:
+        logger.warning("Instagram reels v2: не удалось разобрать список прокси: %s", e)
+
+    for proxy in proxy_phases:
+        for cookie in list(cookie_slots):
+            original = _resolve_instagram_cookie_path(cookie)
+            if not original:
+                continue
+            tmp_cookie_path = None
+            try:
+                tmp_fd, tmp_cookie_path = tempfile.mkstemp(suffix=".txt")
+                os.close(tmp_fd)
+                shutil.copy2(original, tmp_cookie_path)
+                ydl_opts = _instagram_reels_ydl_opts(
+                    f"{path}/{filename}_temp.%(ext)s",
+                    tmp_cookie_path,
+                )
+                _apply_youtube_proxy_to_ydl_opts(ydl_opts, proxy)
+                logger.info(
+                    "Instagram reels v2: try cookie=%s proxy=%s",
+                    cookie,
+                    "direct" if proxy is None else next(iter(proxy.keys()), ""),
+                )
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([reels_url])
+
+                downloaded = _find_reels_temp_media(path, filename)
+                if not downloaded:
+                    logger.error(
+                        "Instagram reels v2: не найден файл после скачивания (%s_temp.*)",
+                        filename,
+                    )
+                    _cleanup_reels_temp_prefix(path, filename)
+                    continue
+
+                output_file = f"{path}/{filename}.mp4"
+                ffmpeg_cmd = [
+                    "ffmpeg",
+                    "-i",
+                    downloaded,
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    "ultrafast",
+                    "-crf",
+                    "23",
+                    "-profile:v",
+                    "baseline",
+                    "-level",
+                    "3.1",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-c:a",
+                    "aac",
+                    "-b:a",
+                    "128k",
+                    "-movflags",
+                    "+faststart",
+                    "-y",
+                    output_file,
+                ]
+                logger.info(f"Running ffmpeg: {' '.join(ffmpeg_cmd)}")
+                result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+
+                if result.returncode != 0:
+                    logger.error(f"FFmpeg error: {result.stderr}")
+                    _cleanup_reels_temp_prefix(path, filename)
+                    continue
+
+                try:
+                    os.remove(downloaded)
+                except OSError:
+                    pass
+
+                logger.info(f"Downloaded and encoded for iOS: {output_file}")
+                return output_file
+            except Exception as e:
+                logger.error(
+                    "Instagram reels v2 failed cookie=%s proxy=%s: %s",
+                    cookie,
+                    "direct" if proxy is None else next(iter(proxy.keys()), ""),
+                    e,
+                )
+                _cleanup_reels_temp_prefix(path, filename)
+            finally:
+                if tmp_cookie_path and os.path.exists(tmp_cookie_path):
+                    try:
+                        os.remove(tmp_cookie_path)
+                    except OSError:
+                        pass
+                _apply_youtube_proxy_to_ydl_opts({}, None)
     return None
 
 
